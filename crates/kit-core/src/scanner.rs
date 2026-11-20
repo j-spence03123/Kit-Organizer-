@@ -227,7 +227,7 @@ mod tests {
         touch(&root.join(".hidden/x.wav"));
         let types = FileTypeSettings::default();
         let rep = scan(
-            &ScanOptions { roots: &[root.clone()], exclude: &[], file_types: &types },
+            &ScanOptions { roots: std::slice::from_ref(&root), exclude: &[], file_types: &types },
             &AtomicBool::new(false),
             &|_| {},
         )
@@ -257,7 +257,7 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let out = d.path().join("Organised Samples");
         touch(&out.join("Kicks/k.wav"));
-        assert!(normalise_roots(&[out.join("Kicks")], &[out.clone()]).is_err());
+        assert!(normalise_roots(&[out.join("Kicks")], std::slice::from_ref(&out)).is_err());
     }
 
     #[test]
@@ -289,7 +289,7 @@ mod tests {
         touch(&root.join("locked/Snare.wav"));
         fs::set_permissions(root.join("locked"), fs::Permissions::from_mode(0o000)).unwrap();
         let types = FileTypeSettings::default();
-        let rep = scan(&ScanOptions { roots: &[root.clone()], exclude: &[], file_types: &types }, &AtomicBool::new(false), &|_| {})
+        let rep = scan(&ScanOptions { roots: std::slice::from_ref(&root), exclude: &[], file_types: &types }, &AtomicBool::new(false), &|_| {})
             .unwrap();
         fs::set_permissions(root.join("locked"), fs::Permissions::from_mode(0o755)).unwrap();
         // Running as root bypasses permissions; only assert when it applied.

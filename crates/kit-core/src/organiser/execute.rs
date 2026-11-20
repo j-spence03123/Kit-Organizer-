@@ -116,7 +116,7 @@ pub fn execute(
     let bytes_total: u64 = transfers.iter().map(|o| o.size).sum();
     let mut bytes_done = 0u64;
     let mut last = Instant::now() - Duration::from_secs(1);
-    for (i, (o, mut row)) in transfers.iter().zip(rows.into_iter()).enumerate() {
+    for (i, (o, mut row)) in transfers.iter().zip(rows).enumerate() {
         row.id = ids[i];
         if cancel.load(Ordering::Relaxed) {
             rep.cancelled = true;

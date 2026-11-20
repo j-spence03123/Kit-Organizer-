@@ -44,7 +44,7 @@ fn env() -> Env {
 
 fn import(e: &Env, dup: DuplicateHandling) -> String {
     let types = FileTypeSettings::default();
-    let rep = scan(&ScanOptions { roots: &[e.src.clone()], exclude: &[e.out.clone()], file_types: &types }, &AtomicBool::new(false), &|_| {})
+    let rep = scan(&ScanOptions { roots: std::slice::from_ref(&e.src), exclude: std::slice::from_ref(&e.out), file_types: &types }, &AtomicBool::new(false), &|_| {})
         .unwrap();
     assert_eq!(rep.unsupported, 1);
     let c = Classifier::new(CompiledConfig::compile(&default_config()).unwrap());
@@ -70,7 +70,7 @@ fn import(e: &Env, dup: DuplicateHandling) -> String {
 }
 
 fn plan_for(e: &Env, id: &str, mode: OpMode) -> Plan {
-    let lib = validate_output(&e.out, "Organised Samples", &[e.src.clone()]).unwrap();
+    let lib = validate_output(&e.out, "Organised Samples", std::slice::from_ref(&e.src)).unwrap();
     let samples = e.db.lock().unwrap().samples_for_import(id).unwrap();
     build_plan(
         &samples,
