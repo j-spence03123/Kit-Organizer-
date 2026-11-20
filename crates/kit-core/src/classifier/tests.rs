@@ -259,3 +259,26 @@ fn deterministic() {
         assert_eq!(run("P/FX/Reverse Crash.wav"), a);
     }
 }
+
+#[test]
+fn weak_pack_name_alone_falls_back_to_uncategorised() {
+    let r = run("XLNT Riddim Vol 1/Misc/Thing_01.wav");
+    assert_eq!(r.category_path, "Uncategorised");
+    assert_eq!(r.alternatives.first().map(|a| a.path.as_str()), Some("Bass/Riddim Basses"));
+}
+
+#[test]
+fn short_folder_names_are_strong_when_whole() {
+    let r = expect("P/HH/Thing_01.wav", "Hi-Hats");
+    // Folder-only evidence for a broad parent category: strong alias (not
+    // halved), but still below the default review threshold.
+    assert!(r.confidence > 0.4, "{}", r.confidence);
+}
+
+#[test]
+fn loop_context_supports_instrument_loops() {
+    let r = expect("XLNT/Melodic/Piano_Melody_140BPM.wav", "Melodic Loops/Piano Loops");
+    assert!(r.confidence >= 0.6, "{} {:#?}", r.confidence, r.evidence);
+    let r = expect("P/Drum Loops/Kick_Groove_120bpm.wav", "Drum Loops/Kick Loops");
+    assert!(r.confidence >= 0.6, "{} {:#?}", r.confidence, r.evidence);
+}

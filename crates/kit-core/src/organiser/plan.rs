@@ -25,6 +25,9 @@ pub struct PlannedOp {
     pub dest_name: String,
     pub dest_path: String,
     pub action: PlannedAction,
+    /// Category the file will actually be placed in (may differ from the
+    /// prediction when low-confidence files are rerouted).
+    pub category_id: String,
     pub category_path: String,
     pub hash: Option<String>,
     pub size: u64,
@@ -127,6 +130,7 @@ pub fn build_plan(samples: &[SampleRow], opts: &PlanOptions) -> CoreResult<Plan>
             dest_name: r.original_filename.clone(),
             dest_path: String::new(),
             action: transfer,
+            category_id: r.category_id.clone(),
             category_path: r.category_path.clone(),
             hash: r.hash.clone(),
             size: r.size,
@@ -175,6 +179,7 @@ pub fn build_plan(samples: &[SampleRow], opts: &PlanOptions) -> CoreResult<Plan>
             match opts.low_confidence {
                 LowConfidenceAction::Uncategorised => {
                     s.low_confidence_rerouted += 1;
+                    op.category_id = opts.uncategorised.0.to_string();
                     op.category_path = opts.uncategorised.1.to_string();
                     op.reason = Some(format!(
                         "low confidence ({:.0}%) — predicted {}, placed in {} until reviewed",

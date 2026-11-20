@@ -142,7 +142,7 @@ export function createBackend() {
       log("previewPlan", importId, outputDir, mode);
       const transfers = samples.map((s) => ({
         sampleId: s.id, src: s.originalPath, destDir: `${outputDir}/Organised Samples/${s.categoryPath}`, destName: s.originalFilename,
-        destPath: `${outputDir}/Organised Samples/${s.categoryPath}/${s.originalFilename}`, action: mode as "copy", categoryPath: s.categoryPath,
+        destPath: `${outputDir}/Organised Samples/${s.categoryPath}/${s.originalFilename}`, action: mode as "copy", categoryId: s.categoryId, categoryPath: s.categoryPath,
         hash: s.hash, size: s.size, reason: null, renamedFrom: null, duplicate: false, skipStatus: null,
       }));
       return {

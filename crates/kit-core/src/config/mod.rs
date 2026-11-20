@@ -88,6 +88,14 @@ pub struct ClassifierWeights {
     pub saturation: f32,
     /// Loop score at or above which a sample is treated as a loop.
     pub loop_threshold: f32,
+    /// Below this best score the evidence is too weak to act on and the
+    /// sample goes to Uncategorised.
+    #[serde(default = "default_min_score")]
+    pub min_score: f32,
+}
+
+fn default_min_score() -> f32 {
+    0.75
 }
 
 impl Default for ClassifierWeights {
@@ -105,6 +113,7 @@ impl Default for ClassifierWeights {
             priority_step: 0.25,
             saturation: 2.0,
             loop_threshold: 2.0,
+            min_score: default_min_score(),
         }
     }
 }
@@ -154,6 +163,8 @@ impl NodeInfo {
 pub struct AliasHit {
     pub node: usize,
     pub weak: bool,
+    /// Weak only because it is a very short single token (not marked `~`).
+    pub auto_weak: bool,
     pub tokens: usize,
     pub alias: String,
 }
@@ -266,9 +277,10 @@ impl CompiledConfig {
                 if toks.is_empty() {
                     continue;
                 }
-                let weak = weak_marked || (toks.len() == 1 && toks[0].chars().count() <= 2);
+                let auto_weak = !weak_marked && toks.len() == 1 && toks[0].chars().count() <= 2;
+                let weak = weak_marked || auto_weak;
                 max_phrase = max_phrase.max(toks.len());
-                let hit = AliasHit { node: idx, weak, tokens: toks.len(), alias: text.trim().to_string() };
+                let hit = AliasHit { node: idx, weak, auto_weak, tokens: toks.len(), alias: text.trim().to_string() };
                 let spaced = toks.join(" ");
                 push_unique(&mut aliases, spaced, hit.clone());
                 if toks.len() > 1 {

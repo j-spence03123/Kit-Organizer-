@@ -192,7 +192,7 @@ export function Segmented<T extends string>({
   ariaLabel: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={ariaLabel} className="inline-flex rounded-md border border-line-strong bg-panel-2 p-0.5">
+    <div role="radiogroup" aria-label={ariaLabel} className="inline-flex w-fit justify-self-start rounded-md border border-line-strong bg-panel-2 p-0.5">
       {options.map((o) => (
         <button
           key={o.value}
@@ -223,8 +223,10 @@ export function Field({ label, hint, children }: { label: string; hint?: ReactNo
   );
 }
 
-export const inputClass =
-  "h-8 w-full rounded-md border border-line-strong bg-panel-2 px-2.5 text-[13px] text-fg placeholder:text-faint focus:border-accent focus:outline-none";
+/** Input styling without a width, for inputs that set their own. */
+export const inputBase =
+  "h-8 rounded-md border border-line-strong bg-panel-2 px-2.5 text-[13px] text-fg placeholder:text-faint focus:border-accent focus:outline-none";
+export const inputClass = `${inputBase} w-full`;
 
 export function EmptyState({ icon, title, children, action }: { icon: ReactNode; title: string; children?: ReactNode; action?: ReactNode }) {
   return (

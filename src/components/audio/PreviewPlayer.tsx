@@ -35,7 +35,7 @@ export function PreviewPlayer({ path, name, audio, bpm, bpmSource, musicalKey, p
   ];
 
   return (
-    <div className="grid gap-3">
+    <div className="grid min-w-0 gap-3">
       <div className="flex items-center gap-2">
         <IconButton
           label={playing ? "Pause" : "Play"}
@@ -62,7 +62,7 @@ export function PreviewPlayer({ path, name, audio, bpm, bpmSource, musicalKey, p
         <div className="min-w-0 flex-1 truncate text-[13px] font-medium" title={name} data-selectable>
           {name}
         </div>
-        <span className="tabular text-xs text-muted">
+        <span className="tabular shrink-0 text-xs text-muted">
           {active ? formatDuration(p.position) : "0.00s"} / {formatDuration(active && p.duration ? p.duration : audio?.durationSecs)}
         </span>
       </div>

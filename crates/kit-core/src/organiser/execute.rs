@@ -206,6 +206,11 @@ fn run_one(db: &Mutex<Database>, o: &super::plan::PlannedOp, row: &mut Operation
     let d = lock(db);
     d.update_operation(row)?;
     d.set_sample_result(&o.sample_id, SampleStatus::Organised, Some(&row.dest), None)?;
+    if let Some(why) = &o.reason {
+        // Rerouted (e.g. low confidence → Uncategorised): record where the
+        // file really is so the library matches the disk.
+        d.set_sample_category(&o.sample_id, &o.category_id, &o.category_path, why)?;
+    }
     Ok(final_path)
 }
 

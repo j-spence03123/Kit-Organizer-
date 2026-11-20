@@ -99,6 +99,8 @@ pub struct Evidence {
     pub points: f32,
     pub label: String,
     pub origin: Origin,
+    /// Came from a weak alias.
+    pub weak: bool,
 }
 
 /// Prepared, tokenised view of the input shared by all sources.
@@ -123,7 +125,7 @@ pub struct PhraseMatch {
     pub start: usize,
     pub len: usize,
     pub text: String,
-    pub hits: Vec<(usize, bool, usize)>, // node, weak, alias token count
+    pub hits: Vec<(usize, bool, usize, bool)>, // node, weak, alias token count, auto-weak
 }
 
 /// Greedy longest-phrase-first matching against the alias table.
@@ -152,7 +154,7 @@ pub fn match_phrases(cfg: &CompiledConfig, tokens: &[String]) -> Vec<PhraseMatch
                         start: i,
                         len: n,
                         text: w.join(" "),
-                        hits: hits.iter().map(|h| (h.node, h.weak, h.tokens)).collect(),
+                        hits: hits.iter().map(|h| (h.node, h.weak, h.tokens, h.auto_weak)).collect(),
                     });
                     i += n;
                     continue 'outer;
@@ -182,7 +184,7 @@ impl EvidenceSource for FilenameSource {
         let w = &cfg.source.weights;
         let mut out = Vec::new();
         for m in match_phrases(cfg, &p.name_tokens) {
-            for &(node, weak, ntok) in &m.hits {
+            for &(node, weak, ntok, _) in &m.hits {
                 let mut pts = w.filename + w.phrase_bonus * (ntok.saturating_sub(1)) as f32;
                 pts *= node_factor(cfg, node);
                 if weak {
@@ -198,6 +200,7 @@ impl EvidenceSource for FilenameSource {
                         cfg.path_of(node)
                     ),
                     origin: Origin::Filename { position: m.start },
+                    weak,
                 });
             }
         }
@@ -223,7 +226,11 @@ impl EvidenceSource for FolderSource {
                 factor *= w.root_folder_factor;
             }
             for m in match_phrases(cfg, toks) {
-                for &(node, weak, ntok) in &m.hits {
+                // A folder named exactly "FX" or "HH" is deliberate, so short
+                // aliases are only weak when they are part of a longer name.
+                let whole_name = m.start == 0 && m.len == toks.len();
+                for &(node, weak, ntok, auto_weak) in &m.hits {
+                    let weak = weak && !(auto_weak && whole_name);
                     let mut pts = (w.folder_near + w.phrase_bonus * ntok.saturating_sub(1) as f32) * factor;
                     pts *= node_factor(cfg, node);
                     if weak {
@@ -239,6 +246,7 @@ impl EvidenceSource for FolderSource {
                         points: pts,
                         label: format!("{which} \"{original}\" indicates {}", cfg.path_of(node)),
                         origin: Origin::Folder { distance: *dist },
+                        weak,
                     });
                 }
             }
@@ -356,6 +364,22 @@ impl Classifier {
             evidence.extend(s.collect(cfg, &prepared));
         }
         let w = &cfg.source.weights;
+        // Loop routing happens *before* scoring: when the sample is a loop,
+        // evidence for an instrument (Kicks) is evidence for its loop
+        // destination (Drum Loops/Kick Loops), so folder context such as
+        // "Drum Loops" supports it instead of competing with it.
+        let mut loop_routed_nodes = std::collections::HashSet::new();
+        if lp.is_loop {
+            for e in evidence.iter_mut() {
+                if let Some(t) = cfg.nodes[e.node].loop_target {
+                    if t != e.node {
+                        e.label = format!("{} (loop → {})", e.label, cfg.path_of(t));
+                        e.node = t;
+                        loop_routed_nodes.insert(t);
+                    }
+                }
+            }
+        }
         // Best filename + best folder (+ sums for other origins) per node.
         let mut best_file: HashMap<usize, usize> = HashMap::new();
         let mut best_folder: HashMap<usize, usize> = HashMap::new();
@@ -392,8 +416,10 @@ impl Classifier {
         // filename, the last one is usually the noun ("Neuro Growl").
         let mut head_bonus: Option<(usize, String)> = None;
         {
+            // Weak aliases are descriptors ("melody", "groove"), never the noun.
             let mut file_nodes: Vec<(usize, usize)> = best_file
                 .iter()
+                .filter(|(_, &i)| !evidence[i].weak)
                 .map(|(&node, &i)| match evidence[i].origin {
                     Origin::Filename { position } => (position, node),
                     _ => unreachable!(),
@@ -447,6 +473,33 @@ impl Classifier {
         // Deterministic: score desc, then config order.
         ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal).then(a.0.cmp(&b.0)));
         let (winner, s1) = ranked[0];
+        if s1 < w.min_score {
+            let mut ev = vec![format!(
+                "Evidence too weak to classify (best: {} at {:.2}, minimum {:.2})",
+                cfg.path_of(winner),
+                s1,
+                w.min_score
+            )];
+            ev.extend(evidence.iter().map(|e| format!("{} ({:+.2})", e.label, e.points)));
+            ev.extend(lp.evidence.iter().cloned());
+            return Classification {
+                category_id: cfg.nodes[cfg.uncategorised].id.clone(),
+                category_path: cfg.path_of(cfg.uncategorised).to_string(),
+                confidence: 0.0,
+                evidence: ev,
+                alternatives: vec![Alternative {
+                    category_id: cfg.nodes[winner].id.clone(),
+                    path: cfg.path_of(winner).to_string(),
+                    score: (s1 * 100.0).round() / 100.0,
+                }],
+                sample_type,
+                loop_score: Some(lp.score),
+                bpm,
+                bpm_source,
+                key,
+                method: "fallback".into(),
+            };
+        }
         let related = |a: usize, b: usize| a == b || is_ancestor(&cfg.nodes, a, b) || is_ancestor(&cfg.nodes, b, a);
         let competitors: Vec<(usize, f32)> = ranked.iter().copied().filter(|&(n, _)| !related(n, winner)).collect();
         let s2 = competitors.first().map(|c| c.1).unwrap_or(0.0).max(0.0);
@@ -504,7 +557,8 @@ impl Classifier {
             lp.score,
             if lp.evidence.is_empty() { String::new() } else { format!("; {}", lp.evidence.join("; ")) }
         ));
-        let (final_node, loop_routed) = route(winner, &mut ev_out);
+        let (final_node, routed_now) = route(winner, &mut ev_out);
+        let loop_routed = routed_now || loop_routed_nodes.contains(&winner);
         for (n, s) in competitors.iter().take(3) {
             ev_out.push(format!("Conflicting evidence for {} (score {:.2})", cfg.path_of(*n), s));
         }

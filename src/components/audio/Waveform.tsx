@@ -51,10 +51,11 @@ export function Waveform({
   }, [peaks, progress, height]);
 
   return (
-    <div className="relative w-full" style={{ height }}>
+    <div className="relative w-full min-w-0" style={{ height }}>
+      {/* Absolutely positioned so the canvas's pixel width never stretches its container. */}
       <canvas
         ref={ref}
-        className="h-full w-full cursor-pointer"
+        className="absolute inset-0 h-full w-full cursor-pointer"
         aria-label="Waveform, click to seek"
         onClick={(e) => {
           const r = e.currentTarget.getBoundingClientRect();

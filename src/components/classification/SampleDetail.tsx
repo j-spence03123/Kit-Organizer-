@@ -22,7 +22,7 @@ export function SampleDetail({ row, threshold, editable, onReassign, onAccept, o
   const [pack, setPack] = useState(row.sourcePack);
   const path = row.status === "organised" && row.destinationPath ? row.destinationPath : row.originalPath;
   return (
-    <div className="grid gap-4 p-4" key={row.id}>
+    <div className="grid min-w-0 gap-4 p-4">
       <PreviewPlayer
         path={path}
         name={row.originalFilename}

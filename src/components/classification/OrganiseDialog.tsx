@@ -245,7 +245,7 @@ export function OrganiseDialog({ open, onClose, imp, onFinished }: { open: boole
               </div>
               {mode === "move" && (
                 <label className="flex cursor-pointer gap-2.5 rounded-md border border-warn/40 bg-warn/10 p-3 text-xs text-warn">
-                  <input type="checkbox" checked={confirmMove} onChange={(e) => setConfirmMove(e.target.checked)} className="mt-0.5 accent-[var(--color-warn)]" />
+                  <input type="checkbox" checked={confirmMove} onChange={(e) => setConfirmMove(e.target.checked)} className="kit-check mt-0.5" />
                   <span>
                     I understand that files will be <strong>moved out of their original sample packs</strong>. Each file is verified at the destination before the original is removed, and the operation can be undone from History.
                   </span>

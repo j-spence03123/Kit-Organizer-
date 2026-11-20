@@ -222,6 +222,7 @@ export interface PlannedOp {
   destName: string;
   destPath: string;
   action: "copy" | "move" | "skip";
+  categoryId: string;
   categoryPath: string;
   hash: string | null;
   size: number;

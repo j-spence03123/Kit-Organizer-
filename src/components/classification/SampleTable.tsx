@@ -19,13 +19,13 @@ const LABELS: Record<ColumnKey, string> = {
 };
 
 const WIDTHS: Record<ColumnKey, string> = {
-  filename: "minmax(180px,1.4fr)",
-  folder: "minmax(140px,1fr)",
-  category: "minmax(150px,1fr)",
-  confidence: "104px",
-  destination: "minmax(160px,1.2fr)",
-  status: "120px",
-  pack: "minmax(120px,0.8fr)",
+  filename: "minmax(150px,1.4fr)",
+  folder: "minmax(90px,1fr)",
+  category: "minmax(120px,1fr)",
+  confidence: "96px",
+  destination: "minmax(100px,1fr)",
+  status: "116px",
+  pack: "minmax(100px,0.8fr)",
 };
 
 interface Props {
@@ -36,6 +36,8 @@ interface Props {
   selected?: Set<string>;
   focusedId: string | null;
   onFocus: (row: SampleRow) => void;
+  /** Select without side effects (used by the row play button). */
+  onSelect?: (row: SampleRow) => void;
   onToggle?: (row: SampleRow, shift: boolean) => void;
   onToggleAll?: () => void;
   sort: string;
@@ -51,7 +53,7 @@ function destination(r: SampleRow, root: string): string {
 }
 
 export function SampleTable(props: Props) {
-  const { rows, columns, threshold, rootFolder, selected, focusedId, onFocus, onToggle, onToggleAll, sort, descending, onSort, compact, empty } = props;
+  const { rows, columns, threshold, rootFolder, selected, focusedId, onFocus, onSelect, onToggle, onToggleAll, sort, descending, onSort, compact, empty } = props;
   const player = usePlayer();
   const selectable = !!selected && !!onToggle;
   const template = [selectable ? "32px" : null, "32px", ...columns.map((c) => WIDTHS[c])].filter(Boolean).join(" ");
@@ -59,11 +61,11 @@ export function SampleTable(props: Props) {
   const rowH = compact ? "h-8" : "h-10";
 
   return (
-    <div role="table" aria-label="Samples" aria-rowcount={rows.length} className="min-w-[860px] text-[13px]">
+    <div role="table" aria-label="Samples" aria-rowcount={rows.length} className="min-w-[720px] text-[13px]">
       <div role="row" className="sticky top-0 z-10 grid items-center border-b border-line bg-panel px-2 text-xs text-muted" style={{ gridTemplateColumns: template }}>
         {selectable && (
           <div role="columnheader" className="flex justify-center">
-            <input type="checkbox" aria-label="Select all on this page" checked={allSelected} onChange={onToggleAll} className="accent-[var(--accent)]" />
+            <input type="checkbox" aria-label="Select all on this page" checked={allSelected} onChange={onToggleAll} className="kit-check" />
           </div>
         )}
         <div role="columnheader" />
@@ -108,7 +110,7 @@ export function SampleTable(props: Props) {
                   aria-label={`Select ${r.originalFilename}`}
                   checked={selected.has(r.id)}
                   onChange={(e) => onToggle(r, (e.nativeEvent as MouseEvent).shiftKey)}
-                  className="accent-[var(--accent)]"
+                  className="kit-check"
                 />
               </div>
             )}
@@ -120,7 +122,7 @@ export function SampleTable(props: Props) {
                   className={cx("flex h-6 w-6 items-center justify-center rounded-full hover:bg-raised", playing || loading ? "text-accent" : "text-faint hover:text-fg")}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onFocus(r);
+                    (onSelect ?? onFocus)(r);
                     void player.toggle(path);
                   }}
                 >

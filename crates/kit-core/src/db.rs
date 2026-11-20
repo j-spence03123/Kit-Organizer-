@@ -623,6 +623,19 @@ impl Database {
         Ok(())
     }
 
+    /// Record the category a file was actually placed in, keeping the
+    /// original prediction in the evidence trail.
+    pub fn set_sample_category(&self, id: &str, category_id: &str, category_path: &str, note: &str) -> CoreResult<()> {
+        let ev: Option<String> = self.conn.query_row("SELECT evidence FROM samples WHERE id = ?1", [id], |r| r.get(0)).optional()?;
+        let mut evidence: Vec<String> = from_json(ev);
+        evidence.push(format!("Placed in {category_path}: {note}"));
+        self.conn.execute(
+            "UPDATE samples SET category_id = ?2, category_path = ?3, evidence = ?4, updated_at = ?5 WHERE id = ?1",
+            params![id, category_id, category_path, json(&evidence), now()],
+        )?;
+        Ok(())
+    }
+
     /// Organised samples whose content hash is among `hashes`
     /// (duplicates already in the library).
     pub fn organised_with_hashes(&self, hashes: &[String]) -> CoreResult<Vec<(String, String, String)>> {

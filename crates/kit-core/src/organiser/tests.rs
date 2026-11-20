@@ -361,3 +361,34 @@ fn library_duplicates_detected_on_reimport() {
     let s = e.db.lock().unwrap().import_summary(&id2, 0.6).unwrap();
     assert_eq!(s.duplicates, 7, "every file is already in the library");
 }
+
+#[test]
+fn rerouted_low_confidence_files_record_their_real_category() {
+    let e = env();
+    write(&e.src.join("Misc/Mystery.wav"), b"mystery");
+    write(&e.src.join("Bass/Neuro_Growl.wav"), b"ng"); // ~46%: below threshold
+    let id = import(&e, DuplicateHandling::Skip);
+    let lib_root = validate_output(&e.out, "Organised Samples", &[e.src.clone()]).unwrap();
+    let samples = e.db.lock().unwrap().samples_for_import(&id).unwrap();
+    let p = build_plan(
+        &samples,
+        &PlanOptions {
+            library_root: &lib_root,
+            mode: OpMode::Copy,
+            collision: CollisionHandling::Rename,
+            low_confidence: LowConfidenceAction::Uncategorised,
+            threshold: 0.6,
+            uncategorised: ("uncategorised", "Uncategorised"),
+        },
+    )
+    .unwrap();
+    assert!(p.summary.low_confidence_rerouted >= 1);
+    execute(&e.db, &id, &p, &AtomicBool::new(false), &|_| {}).unwrap();
+    assert!(lib(&e).join("Uncategorised/Neuro_Growl.wav").exists());
+    let db = e.db.lock().unwrap();
+    let row = db.samples_for_import(&id).unwrap().into_iter().find(|r| r.original_filename == "Neuro_Growl.wav").unwrap();
+    assert_eq!(row.category_path, "Uncategorised");
+    assert!(row.evidence.last().unwrap().contains("predicted Bass/Growls"));
+    let tree = db.library_tree().unwrap();
+    assert!(tree.iter().any(|(p, _)| p == "Uncategorised"));
+}

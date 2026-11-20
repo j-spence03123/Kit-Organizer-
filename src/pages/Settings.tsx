@@ -1,7 +1,7 @@
 import { Download, FolderOutput, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PageHeader } from "../components/layout/PageHeader";
-import { Button, Field, Panel, Segmented, Toggle, inputClass } from "../components/ui";
+import { Button, Field, Panel, Segmented, Toggle, inputBase } from "../components/ui";
 import { useApp } from "../hooks/useApp";
 import { api, errorMessage } from "../services/api";
 import { pickFolders, pickJsonFile, pickSavePath } from "../services/dialogs";
@@ -119,7 +119,7 @@ export default function SettingsPage() {
                 />
               </Field>
               <Field label="Worker threads" hint="Used for hashing and reading audio headers. 0 = automatic.">
-                <input type="number" min={0} max={32} className={cx(inputClass, "w-24")} value={s.workerThreads} onChange={(e) => set("workerThreads", Math.max(0, Math.min(32, Number(e.target.value) || 0)))} aria-label="Worker threads" />
+                <input type="number" min={0} max={32} className={cx(inputBase, "w-24")} value={s.workerThreads} onChange={(e) => set("workerThreads", Math.max(0, Math.min(32, Number(e.target.value) || 0)))} aria-label="Worker threads" />
               </Field>
             </div>
           </Panel>
@@ -156,6 +156,7 @@ export default function SettingsPage() {
               <Field label={`Volume: ${Math.round(s.preview.volume * 100)}%`}>
                 <input type="range" min={0} max={1} step={0.05} value={s.preview.volume} onChange={(e) => set("preview", { ...s.preview, volume: Number(e.target.value) })} aria-label="Preview volume" className="accent-[var(--accent)]" />
               </Field>
+              <Toggle label="Play samples when selected" description="Preview starts as soon as you click a row." checked={s.preview.autoplay} onChange={(v) => set("preview", { ...s.preview, autoplay: v })} />
               <Toggle label="Loop playback by default" checked={s.preview.loopPlayback} onChange={(v) => set("preview", { ...s.preview, loopPlayback: v })} />
             </div>
           </Panel>

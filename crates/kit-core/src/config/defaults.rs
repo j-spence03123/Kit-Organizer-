@@ -168,7 +168,7 @@ fn tree() -> Vec<B> {
             c("Other FX", &["other fx", "misc fx", "laser", "lasers", "siren", "sirens", "alarm", "scratch", "scratches", "vinyl scratch", "tape stop", "tapestop"]),
         ]),
         c("Drum Loops", &["drum loop", "drum loops", "drumloop", "drumloops", "drums loop"]).kind(Loop).default_child("Full Loops").kids(vec![
-            c("Full Loops", &["full loop", "full loops", "full drum loop", "full drums", "full beat", "~beat", "~beats", "~groove", "~grooves", "drum groove", "drum beat"]),
+            c("Full Loops", &["full loop", "full loops", "full drum loop", "full drums", "full beat", "~beat", "~beats", "~groove", "~grooves", "drum groove", "drum beat"]).priority(-2),
             c("Top Loops", &["top loop", "top loops", "~top", "~tops", "drum top", "drum tops"]),
             c("Kick Loops", &["kick loop", "kick loops"]),
             c("Snare Loops", &["snare loop", "snare loops"]),
@@ -196,7 +196,7 @@ fn tree() -> Vec<B> {
             c("Arpeggio Loops", &["arp loop", "arp loops", "arpeggio", "arpeggios", "arpeggio loop", "arpeggiated"]),
             c("Chord Loops", &["chord loop", "chord loops", "chords loop", "chord progression", "chord progressions", "progression"]),
             c("Orchestral Loops", &["~orchestral", "~orchestra", "orchestral loop", "orchestral loops"]),
-            c("Full Melody Loops", &["~melody", "~melodies", "full melody", "full melody loop", "composition", "song starter", "song starters"]),
+            c("Full Melody Loops", &["~melody", "~melodies", "full melody", "full melody loop", "composition", "song starter", "song starters"]).priority(-2),
             c("Other Melodic Loops", &["other melodic loop"]),
         ]),
         c("One-Shots", &["melodic one shot", "melodic one shots", "music one shot", "instrument one shot"]).default_child("Other One-Shots").loop_to("Melodic Loops/Other Melodic Loops").kids(vec![

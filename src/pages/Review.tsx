@@ -5,8 +5,9 @@ import { OrganiseDialog } from "../components/classification/OrganiseDialog";
 import { SampleDetail } from "../components/classification/SampleDetail";
 import { Pager, SampleTable } from "../components/classification/SampleTable";
 import { PageHeader } from "../components/layout/PageHeader";
-import { Badge, Button, EmptyState, IconButton, Modal, inputClass } from "../components/ui";
+import { Badge, Button, EmptyState, IconButton, Modal, inputBase, inputClass } from "../components/ui";
 import { useApp } from "../hooks/useApp";
+import { usePlayer } from "../hooks/useAudioPlayer";
 import { useDebounced, useSampleQuery } from "../hooks/useSampleQuery";
 import { api, errorMessage } from "../services/api";
 import type { ImportRecord, ImportSummary, SampleQuery, SampleRow } from "../types";
@@ -35,6 +36,14 @@ export default function Review() {
   const [packDialog, setPackDialog] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const debounced = useDebounced(search);
+  const player = usePlayer();
+  // Optional "play on select" preference.
+  const focusRow = (r: SampleRow) => {
+    setFocused(r);
+    if (settings?.preview.autoplay && r.fileKind === "audio") {
+      void player.play(r.status === "organised" && r.destinationPath ? r.destinationPath : r.originalPath);
+    }
+  };
 
   // Resolve which import to review.
   useEffect(() => {
@@ -196,7 +205,7 @@ export default function Review() {
       <div className="flex flex-wrap items-center gap-2 border-b border-line px-6 py-2.5">
         <div className="relative">
           <Search size={13} className="absolute left-2.5 top-2.5 text-faint" />
-          <input className={cx(inputClass, "w-64 pl-8")} placeholder="Search filename, folder or pack" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search samples" />
+          <input className={cx(inputBase, "w-64 pl-8")} placeholder="Search filename, folder or pack" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search samples" />
         </div>
         <div className="flex rounded-md border border-line-strong bg-panel-2 p-0.5" role="tablist" aria-label="Filter">
           {filters.map(([k, l, n]) => (
@@ -206,7 +215,7 @@ export default function Review() {
             </button>
           ))}
         </div>
-        <select className={cx(inputClass, "w-56")} value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Filter by category">
+        <select className={cx(inputBase, "w-56")} value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Filter by category">
           <option value="">All categories</option>
           {categories.map((c) => (
             <option key={c.id} value={c.path}>
@@ -251,7 +260,8 @@ export default function Review() {
             rootFolder={config?.rootFolder ?? "Organised Samples"}
             selected={selected}
             focusedId={focused?.id ?? null}
-            onFocus={setFocused}
+            onFocus={focusRow}
+              onSelect={setFocused}
             onToggle={toggle}
             onToggleAll={() => setSelected((s) => (rows.every((r) => s.has(r.id)) ? new Set() : new Set(rows.map((r) => r.id))))}
             sort={sort}
@@ -267,7 +277,7 @@ export default function Review() {
             empty={<p className="px-6 py-10 text-center text-xs text-muted">No samples match these filters.</p>}
           />
         </div>
-        <aside className="w-[360px] shrink-0 overflow-auto border-l border-line bg-panel" aria-label="Sample details">
+        <aside className="w-[330px] shrink-0 overflow-auto border-l border-line bg-panel" aria-label="Sample details">
           {focused ? (
             <SampleDetail
               key={focused.id}

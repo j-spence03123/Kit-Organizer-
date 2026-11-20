@@ -4,6 +4,7 @@ description = "Kit Organizer — intelligent music sample organiser"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 
 [lib]
 name = "kit_organizer_lib"

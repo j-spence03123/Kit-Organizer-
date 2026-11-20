@@ -4,8 +4,9 @@ import { SampleDetail } from "../components/classification/SampleDetail";
 import { Pager, SampleTable } from "../components/classification/SampleTable";
 import { PageHeader } from "../components/layout/PageHeader";
 import { LibraryTree } from "../components/library/LibraryTree";
-import { Button, EmptyState, inputClass } from "../components/ui";
+import { Button, EmptyState, inputBase } from "../components/ui";
 import { useApp } from "../hooks/useApp";
+import { usePlayer } from "../hooks/useAudioPlayer";
 import { useDebounced, useSampleQuery } from "../hooks/useSampleQuery";
 import { api, errorMessage } from "../services/api";
 import type { SampleQuery, SampleRow } from "../types";
@@ -24,6 +25,14 @@ export default function Library() {
   const [focused, setFocused] = useState<SampleRow | null>(null);
   const [version, setVersion] = useState(0);
   const debounced = useDebounced(search);
+  const player = usePlayer();
+  // Optional "play on select" preference.
+  const focusRow = (r: SampleRow) => {
+    setFocused(r);
+    if (settings?.preview.autoplay && r.fileKind === "audio") {
+      void player.play(r.status === "organised" && r.destinationPath ? r.destinationPath : r.originalPath);
+    }
+  };
 
   useEffect(() => {
     api.libraryTree().then(setTree).catch(() => undefined);
@@ -61,7 +70,7 @@ export default function Library() {
         actions={
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-2.5 text-faint" />
-            <input className={cx(inputClass, "w-64 pl-8")} placeholder="Search the library" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search library" />
+            <input className={cx(inputBase, "w-64 pl-8")} placeholder="Search the library" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search library" />
           </div>
         }
       />
@@ -81,7 +90,8 @@ export default function Library() {
               threshold={settings?.confidenceThreshold ?? 0.6}
               rootFolder={config?.rootFolder ?? "Organised Samples"}
               focusedId={focused?.id ?? null}
-              onFocus={setFocused}
+              onFocus={focusRow}
+              onSelect={setFocused}
               sort={sort}
               descending={descending}
               onSort={(k) => {

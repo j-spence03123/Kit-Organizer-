@@ -65,3 +65,27 @@ input, textarea, select, [data-selectable] {
   100% { transform: translateX(300%); }
 }
 .animate-indeterminate { animation: indeterminate 1.4s ease-in-out infinite; }
+
+/* Themed checkbox (native ones ignore accent-color in some webviews). */
+.kit-check {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 3px;
+  background: var(--color-panel-2);
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.kit-check:hover { border-color: var(--color-muted); }
+.kit-check:checked { background: var(--accent); border-color: var(--accent); }
+.kit-check:checked::after {
+  content: "";
+  width: 8px;
+  height: 4px;
+  border-left: 2px solid #000;
+  border-bottom: 2px solid #000;
+  transform: translateY(-1px) rotate(-45deg);
+}
