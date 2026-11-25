@@ -50,6 +50,7 @@ pub fn run() {
             commands::list_learned_rules,
             commands::delete_learned_rule,
             commands::clear_learned_rules,
+            commands::import_learned_rules,
             commands::mark_reviewed,
             commands::set_duplicate_decision,
             commands::set_source_pack,

@@ -62,6 +62,7 @@ export const api = {
   listLearnedRules: () => invoke<LearnedRule[]>("list_learned_rules"),
   deleteLearnedRule: (id: number) => invoke<void>("delete_learned_rule", { id }),
   clearLearnedRules: () => invoke<void>("clear_learned_rules"),
+  importLearnedRules: (rules: LearnedRule[]) => invoke<number>("import_learned_rules", { rules }),
   markReviewed: (ids: string[], reviewed: boolean) => invoke<number>("mark_reviewed", { ids, reviewed }),
   setDuplicateDecision: (ids: string[], decision: DupDecision | null) =>
     invoke<number>("set_duplicate_decision", { ids, decision }),

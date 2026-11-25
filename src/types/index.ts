@@ -381,11 +381,12 @@ export interface ExportedConfig {
   formatVersion: number;
   categories: CategoryConfig;
   settings?: Settings;
+  learned?: LearnedRule[];
 }
 
 export interface LearnedRule {
   id: number;
-  kind: "name" | "folder";
+  kind: "name" | "folder" | "group";
   tokens: string[];
   scope: string | null;
   categoryId: string;

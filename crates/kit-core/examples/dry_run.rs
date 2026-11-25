@@ -33,7 +33,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => Database::open_in_memory()?,
     };
     let settings = db.settings()?;
-    let classifier = Classifier::new(CompiledConfig::compile(&db.category_config()?)?);
+    // Same classifier as the app: saved categories plus learned rules.
+    let classifier = Classifier::new(CompiledConfig::compile(&db.category_config()?)?).with_learned(db.learned_rules()?);
     let cancel = AtomicBool::new(false);
     let rep = scan(&ScanOptions { roots: &roots, exclude: &[], file_types: &settings.file_types, skip_daw_projects: settings.skip_daw_projects }, &cancel, &|_| {})?;
     let (total, unsupported) = (rep.total, rep.unsupported);

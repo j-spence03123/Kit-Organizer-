@@ -193,6 +193,7 @@ export default function Categories() {
       const imported = await api.importConfig(path);
       setDraft(cloneConfig(imported.categories));
       setSelected(null);
+      if (imported.learned?.length) await api.importLearnedRules(imported.learned);
       if (imported.settings && settings) {
         await updateSettings(imported.settings);
         toast("Imported categories (unsaved) and settings (applied). Review, then Save.", "ok");

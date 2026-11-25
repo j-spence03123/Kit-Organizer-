@@ -103,6 +103,9 @@ pub struct ExportedConfig {
     pub categories: CategoryConfig,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settings: Option<Settings>,
+    /// Rules learned from your corrections and review decisions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub learned: Option<Vec<learned::LearnedRule>>,
 }
 
 fn check_json_path(path: &str) -> CmdResult<PathBuf> {
@@ -125,9 +128,22 @@ pub fn export_config(state: State<AppState>, path: String, include_settings: boo
         format_version: 1,
         categories: db.category_config().map_err(err)?,
         settings: if include_settings { Some(db.settings().map_err(err)?) } else { None },
+        learned: if include_settings { Some(db.learned_rules().map_err(err)?) } else { None },
     };
     let json = serde_json::to_string_pretty(&out).map_err(err)?;
     std::fs::write(&p, json).map_err(|e| format!("could not write {}: {e}", p.display()))
+}
+
+/// Merge learned rules from an imported configuration.
+#[tauri::command]
+pub fn import_learned_rules(state: State<AppState>, rules: Vec<learned::LearnedRule>) -> CmdResult<usize> {
+    let items: Vec<(learned::Pattern, String, String)> = rules
+        .iter()
+        .map(|r| (learned::Pattern { kind: r.kind, tokens: r.tokens.clone(), scope: r.scope.clone() }, r.category_id.clone(), r.example.clone()))
+        .collect();
+    state.db().upsert_learned_many(&items).map_err(err)?;
+    state.rebuild_classifier().map_err(err)?;
+    Ok(items.len())
 }
 
 /// Read and validate a configuration file without applying it.
@@ -147,6 +163,7 @@ pub fn import_config(path: String) -> CmdResult<ExportedConfig> {
             format_version: 1,
             categories: serde_json::from_str(&text).map_err(|e| format!("not a Kit Organizer configuration: {e}"))?,
             settings: None,
+            learned: None,
         },
     };
     CompiledConfig::compile(&parsed.categories).map_err(err)?;
@@ -433,9 +450,13 @@ fn propagate(state: &AppState, ids: &[String], category: Option<&str>) -> CoreRe
     let c = state.classifier();
     let unc_id = c.config().nodes[c.config().uncategorised].id.clone();
     let mut changed = 0;
+    let mut rules = Vec::new();
     for id in ids {
         let Some(rep) = state.db().get_sample(id)? else { continue };
         let cat = category.map(String::from).unwrap_or_else(|| rep.category_id.clone());
+        if rep.review_group.is_some() {
+            rules.extend(review::group_rules_for(std::slice::from_ref(&rep), Some(&cat)));
+        }
         if cat == unc_id {
             // Kept in Uncategorised: keep its folders like the automatic ones.
             state.db().set_subfolder(&rep.id, review::uncategorised_subfolder(&rep.relative_dir).as_deref())?;
@@ -446,6 +467,7 @@ fn propagate(state: &AppState, ids: &[String], category: Option<&str>) -> CoreRe
         if member_ids.is_empty() {
             continue;
         }
+        rules.extend(review::group_rules_for(&members, Some(&cat)));
         let idx = c.config().by_id.get(&cat).ok_or_else(|| CoreError::Other("unknown category".into()))?;
         let path = c.config().path_of(*idx).to_string();
         changed += state.db().reassign(&member_ids, &cat, &path)?;
@@ -455,7 +477,18 @@ fn propagate(state: &AppState, ids: &[String], category: Option<&str>) -> CoreRe
             }
         }
     }
+    remember_group_decisions(state, rules)?;
     Ok(changed)
+}
+
+/// Save group decisions ("files in this folder predicted as X are Y") so
+/// later scans of the same folders don't ask again.
+fn remember_group_decisions(state: &AppState, rules: Vec<(learned::Pattern, String, String)>) -> CoreResult<()> {
+    if rules.is_empty() || !state.db().settings()?.learn_from_corrections {
+        return Ok(());
+    }
+    state.db().upsert_learned_many(&rules)?;
+    state.rebuild_classifier()
 }
 
 /// Re-apply the review budget for an import (no-op when the budget is 0).
@@ -557,7 +590,9 @@ fn bulk(state: &AppState, query: SampleQuery, category: Option<String>) -> CoreR
             state.db().mark_reviewed(&ids, true)?;
         }
     }
+    let group_rules = review::group_rules_for(&rows, category.as_deref());
     let followed = propagate(state, &ids, category.as_deref())?;
+    remember_group_decisions(state, group_rules)?;
     let after_decision = review::needs_review_count(&state.db(), &import_id, t)?;
     let mut remaining = if settings.learn_from_corrections && learn(state, &rows, category.as_deref())? {
         let classifier = state.classifier();

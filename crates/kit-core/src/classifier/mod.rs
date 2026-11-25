@@ -449,6 +449,8 @@ impl Classification {
 pub struct Classifier {
     cfg: CompiledConfig,
     sources: Vec<Box<dyn EvidenceSource>>,
+    /// (folder key, predicted category id) → (decided category id, example).
+    group_rules: HashMap<(String, String), (String, String)>,
 }
 
 impl Classifier {
@@ -462,11 +464,16 @@ impl Classifier {
                 Box::new(ContextSource),
                 Box::new(AudioSource),
             ],
+            group_rules: HashMap::new(),
         }
     }
 
     /// Add rules learned from the user's corrections.
-    pub fn with_learned(self, rules: Vec<learned::LearnedRule>) -> Self {
+    pub fn with_learned(mut self, rules: Vec<learned::LearnedRule>) -> Self {
+        for r in rules.iter().filter(|r| r.kind == learned::RuleKind::Group && r.tokens.len() == 2) {
+            self.group_rules
+                .insert((r.tokens[0].clone(), r.tokens[1].clone()), (r.category_id.clone(), r.example.clone()));
+        }
         self.with_source(Box::new(learned::LearnedSource::new(rules)))
     }
 
@@ -481,6 +488,37 @@ impl Classifier {
     }
 
     pub fn classify(&self, input: &ClassifyInput) -> Classification {
+        let c = self.classify_inner(input);
+        self.apply_group_rule(input, c)
+    }
+
+    /// Re-apply a decision you made for a review group: files in the same
+    /// folder that were predicted the same way get your answer.
+    fn apply_group_rule(&self, input: &ClassifyInput, mut c: Classification) -> Classification {
+        if self.group_rules.is_empty() || c.method == "construction-kit" || c.method == "file-type" {
+            return c;
+        }
+        let Some(key) = learned::folder_key(input.folders) else { return c };
+        let Some((to, example)) = self.group_rules.get(&(key, c.category_id.clone())) else { return c };
+        let Some(&node) = self.cfg.by_id.get(to) else { return c };
+        let from = c.category_path.clone();
+        c.category_id = self.cfg.nodes[node].id.clone();
+        c.category_path = self.cfg.path_of(node).to_string();
+        c.confidence = c.confidence.max(0.9);
+        c.subfolder = if node == self.cfg.uncategorised { uncategorised_folders(input.folders) } else { None };
+        c.evidence.insert(
+            0,
+            if from == c.category_path {
+                format!("You confirmed {from} for files like “{example}” in this folder")
+            } else {
+                format!("You decided files in this folder predicted as {from} belong in {} (like “{example}”)", c.category_path)
+            },
+        );
+        c.method = format!("{}+decided", c.method);
+        c
+    }
+
+    fn classify_inner(&self, input: &ClassifyInput) -> Classification {
         let cfg = &self.cfg;
         let stem = stem(input.file_name);
         if matches!(input.kind, FileKind::Audio | FileKind::Midi) {
@@ -1009,6 +1047,15 @@ pub fn daw_project_with_name(folders: &[String], file_name: &str) -> Option<&'st
         }
     }
     None
+}
+
+/// Uncategorised files keep their original folders (minus the imported root).
+fn uncategorised_folders(folders: &[String]) -> Option<String> {
+    match folders.len() {
+        0 => None,
+        1 => Some(folders[0].clone()),
+        _ => Some(folders[1..].join("/")),
+    }
 }
 
 /// Id of the category that keeps construction kits together.

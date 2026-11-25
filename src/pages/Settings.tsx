@@ -247,7 +247,7 @@ export default function SettingsPage() {
                   }
                 }}
               >
-                Export settings & categories
+                Export settings, categories & learned rules
               </Button>
               <Button
                 icon={<Upload size={14} />}
@@ -259,7 +259,8 @@ export default function SettingsPage() {
                     await api.saveCategoryConfig(cfg.categories);
                     setConfig(cfg.categories);
                     if (cfg.settings) await updateSettings(cfg.settings);
-                    toast("Configuration imported and applied", "ok");
+                    const learned = cfg.learned?.length ? await api.importLearnedRules(cfg.learned) : 0;
+                    toast(`Configuration imported and applied${learned ? ` (${learned} learned rules)` : ""}`, "ok");
                   } catch (e) {
                     toast(errorMessage(e), "error");
                   }

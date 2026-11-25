@@ -979,7 +979,11 @@ impl Database {
                 let scope: String = r.get(3)?;
                 Ok(LearnedRule {
                     id: r.get(0)?,
-                    kind: if kind == "folder" { RuleKind::Folder } else { RuleKind::Name },
+                    kind: match kind.as_str() {
+                        "folder" => RuleKind::Folder,
+                        "group" => RuleKind::Group,
+                        _ => RuleKind::Name,
+                    },
                     tokens: tokens.split(' ').filter(|t| !t.is_empty()).map(String::from).collect(),
                     scope: (!scope.is_empty()).then_some(scope),
                     category_id: r.get(4)?,

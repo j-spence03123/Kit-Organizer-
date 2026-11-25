@@ -159,11 +159,38 @@ pub fn patterns_for(cfg: &CompiledConfig, rows: &[SampleRow], category: Option<&
         .filter(|r| category.is_some() || r.category_id != cfg.nodes[cfg.uncategorised].id)
         // Kit membership comes from the folder, not the name: nothing to learn.
         .filter(|r| category.unwrap_or(&r.category_id) != crate::classifier::KITS_ID)
+        // "Keep in Uncategorised" is remembered per folder (group rules), not
+        // as a name pattern that could spread to other packs.
+        .filter(|r| category.unwrap_or(&r.category_id) != cfg.nodes[cfg.uncategorised].id)
         .filter_map(|r| {
             let folders: Vec<String> = r.relative_dir.split('/').filter(|s| !s.is_empty()).map(String::from).collect();
             let p = pattern_of(cfg, &r.original_filename, &folders)?;
             let cat = category.unwrap_or(&r.category_id).to_string();
             seen.insert((p.clone(), cat.clone())).then(|| (p, cat, r.original_filename.clone()))
+        })
+        .collect()
+}
+
+/// The category the classifier originally predicted for a row: for files
+/// resolved automatically it is recorded in their review group.
+pub fn original_prediction(r: &SampleRow) -> String {
+    r.review_group
+        .as_deref()
+        .and_then(|g| g.rsplit_once('|').map(|(_, c)| c.to_string()))
+        .unwrap_or_else(|| r.category_id.clone())
+}
+
+/// Group-decision rules for decided rows: "files in this folder predicted
+/// as X are Y". `category` = None confirms each row's (original) prediction.
+pub fn group_rules_for(rows: &[SampleRow], category: Option<&str>) -> Vec<(Pattern, String, String)> {
+    let mut seen = std::collections::HashSet::new();
+    rows.iter()
+        .filter_map(|r| {
+            let folders: Vec<String> = r.relative_dir.split('/').filter(|s| !s.is_empty()).map(String::from).collect();
+            let predicted = original_prediction(r);
+            let to = category.map(String::from).unwrap_or_else(|| r.category_id.clone());
+            let p = crate::classifier::learned::group_pattern(&folders, &predicted)?;
+            seen.insert((p.clone(), to.clone())).then(|| (p, to, r.original_filename.clone()))
         })
         .collect()
 }
@@ -580,5 +607,86 @@ mod auto_tests {
     fn uncategorised_keeps_original_folders() {
         assert_eq!(uncategorised_subfolder("Kits/vengeance/VEH1 Cutted Sounds").as_deref(), Some("vengeance/VEH1 Cutted Sounds"));
         assert_eq!(uncategorised_subfolder("Pack").as_deref(), Some("Pack"));
+    }
+}
+
+#[cfg(test)]
+mod remember_tests {
+    use super::*;
+    use crate::classifier::learned::LearnedRule;
+    use crate::classifier::ClassifyInput;
+    use crate::config::default_config;
+    use crate::filetypes::FileKind;
+
+    fn classify_all(c: &Classifier, files: &[(&str, &str)]) -> Vec<crate::classifier::Classification> {
+        files
+            .iter()
+            .map(|(dir, name)| {
+                let folders: Vec<String> = dir.split('/').map(String::from).collect();
+                c.classify(&ClassifyInput { file_name: name, folders: &folders, kind: FileKind::Audio, audio: None, hints: &[] })
+            })
+            .collect()
+    }
+
+    fn to_rules(items: Vec<(Pattern, String, String)>) -> Vec<LearnedRule> {
+        items
+            .into_iter()
+            .enumerate()
+            .map(|(i, (p, cat, ex))| LearnedRule { id: i as i64, kind: p.kind, tokens: p.tokens, scope: p.scope, category_id: cat, example: ex, hits: 1, created_at: String::new() })
+            .collect()
+    }
+
+    #[test]
+    fn group_decisions_are_remembered_for_later_scans() {
+        let cfg = CompiledConfig::compile(&default_config()).unwrap();
+        let plain = Classifier::new(cfg.clone());
+        let files: Vec<(&str, String)> = (0..12)
+            .map(|i| ("Kits/vengeance/Vengeance - Essential House Vol.1/VEH1 Cutted Sounds", format!("VEH1 Cutted Sounds - {i:03}.wav")))
+            .chain((0..6).map(|i| ("Kits/bster/samples", format!("[SAMPLE] title number {i}.wav"))))
+            .collect();
+        let refs: Vec<(&str, &str)> = files.iter().map(|(d, n)| (*d, n.as_str())).collect();
+        let before = classify_all(&plain, &refs);
+        assert!(before.iter().all(|c| c.confidence < 0.6), "all uncertain to begin with");
+
+        // The user decides two groups: Cutted Sounds → Other FX, the [SAMPLE] folder → keep in Uncategorised.
+        let mut decided = Vec::new();
+        for ((dir, name), c) in refs.iter().zip(&before) {
+            let mut row = crate::review::tests_support::row(dir, name, &c.category_id, c.confidence);
+            row.review_group = Some(format!("{dir}|{}", c.category_id));
+            decided.push(row);
+        }
+        let (cut, samp): (Vec<_>, Vec<_>) = decided.into_iter().partition(|r| r.relative_dir.contains("Cutted"));
+        let mut items = group_rules_for(&cut, Some("fx/other-fx"));
+        items.extend(group_rules_for(&samp, Some("uncategorised")));
+        assert_eq!(items.len(), 2, "one rule per folder decision");
+
+        // A later scan of the same folders: no questions asked.
+        let learned = Classifier::new(cfg).with_learned(to_rules(items));
+        let after = classify_all(&learned, &refs);
+        for (c, (dir, name)) in after.iter().zip(&refs) {
+            assert!(c.confidence >= 0.9, "{dir}/{name}: {} {:#?}", c.confidence, c.evidence);
+        }
+        assert!(after[..12].iter().all(|c| c.category_path == "FX/Other FX"));
+        assert!(after[12..].iter().all(|c| c.category_path == "Uncategorised" && c.subfolder.as_deref() == Some("bster/samples")));
+        // A clearly named file in the same folder keeps its own category.
+        let kick = classify_all(&learned, &[("Kits/vengeance/Vengeance - Essential House Vol.1/VEH1 Cutted Sounds", "Kick_01.wav")]);
+        assert_eq!(kick[0].category_path, "Kicks");
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests_support {
+    use crate::db::now;
+    use crate::models::*;
+    pub fn row(dir: &str, name: &str, cat: &str, conf: f32) -> SampleRow {
+        SampleRow {
+            id: format!("{dir}/{name}"), import_id: "imp".into(), original_path: format!("/x/{dir}/{name}"), original_filename: name.into(),
+            original_dir: format!("/x/{dir}"), relative_dir: dir.into(), source_pack: "p".into(), size: 1, hash: None,
+            file_kind: crate::filetypes::FileKind::Audio, category_id: cat.into(), category_path: cat.into(), confidence: conf,
+            evidence: vec![], alternatives: vec![], sample_type: crate::classifier::SampleType::OneShot, bpm: None, bpm_source: None,
+            key: None, key_source: None, method: "x".into(), subfolder: None, auto_resolved: false, review_group: None, review_group_size: None,
+            audio: None, manual_override: false, reviewed: false, status: SampleStatus::Pending, duplicate_of: None, duplicate_path: None,
+            dup_decision: None, destination_path: None, error: None, created_at: now(), updated_at: now(),
+        }
     }
 }

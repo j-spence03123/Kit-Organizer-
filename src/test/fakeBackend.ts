@@ -167,6 +167,7 @@ export function createBackend() {
     listLearnedRules: async () => [],
     deleteLearnedRule: async () => undefined,
     clearLearnedRules: async () => undefined,
+    importLearnedRules: async () => 0,
     markReviewed: async (ids: string[]) => {
       samples = samples.map((s) => (ids.includes(s.id) ? { ...s, reviewed: true } : s));
       return ids.length;

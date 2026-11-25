@@ -19,6 +19,10 @@ pub enum RuleKind {
     Name,
     /// Matches the parent folder (for files with no meaningful name).
     Folder,
+    /// A decision made for a review group: files in this folder that the
+    /// classifier predicted as one category belong in another (or the same).
+    /// `tokens` = [folder key, predicted category id].
+    Group,
 }
 
 impl RuleKind {
@@ -26,6 +30,7 @@ impl RuleKind {
         match self {
             RuleKind::Name => "name",
             RuleKind::Folder => "folder",
+            RuleKind::Group => "group",
         }
     }
 }
@@ -57,8 +62,36 @@ impl Pattern {
         match self.kind {
             RuleKind::Name => format!("files named like “{}”", self.tokens.join(" ")),
             RuleKind::Folder => format!("unnamed files in folders called “{}”", self.tokens.join(" ")),
+            RuleKind::Group => format!(
+                "files in “{}” predicted as {}",
+                self.tokens.first().map(|k| k.replace('_', " ")).unwrap_or_default(),
+                self.tokens.get(1).map(String::as_str).unwrap_or("?")
+            ),
         }
     }
+}
+
+/// Identifies a folder across scans: its last two folder names, normalised
+/// (`vengeance_essential_house_vol_1/veh1_cutted_sounds`). Stable as long as
+/// the library is imported from the same root.
+pub fn folder_key(folders: &[String]) -> Option<String> {
+    let parts: Vec<String> = folders
+        .iter()
+        .rev()
+        .take(2)
+        .map(|f| super::tokenize::fine_tokens(f).join("_"))
+        .filter(|s| !s.is_empty())
+        .collect();
+    if parts.is_empty() {
+        return None;
+    }
+    Some(parts.into_iter().rev().collect::<Vec<_>>().join("/"))
+}
+
+/// A group-decision pattern for a file in `folders` that was predicted as
+/// `predicted`.
+pub fn group_pattern(folders: &[String], predicted: &str) -> Option<Pattern> {
+    Some(Pattern { kind: RuleKind::Group, tokens: vec![folder_key(folders)?, predicted.to_string()], scope: None })
 }
 
 /// Derive the learnable pattern of a file.
@@ -112,6 +145,7 @@ impl LearnedSource {
                     }
                 }
                 RuleKind::Folder => by_folder.entry(r.tokens.join(" ")).or_default().push(i),
+                RuleKind::Group => {} // applied by the classifier after scoring
             }
         }
         Self { rules, by_first, by_folder }
@@ -138,6 +172,7 @@ impl EvidenceSource for LearnedSource {
                 c
             }
             RuleKind::Folder => self.by_folder.get(&pat.tokens.join(" ")).cloned().unwrap_or_default(),
+            RuleKind::Group => vec![],
         };
         for r in candidates.into_iter().map(|i| &self.rules[i]) {
             let Some(&node) = cfg.by_id.get(&r.category_id) else { continue };
