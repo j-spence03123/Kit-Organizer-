@@ -604,10 +604,14 @@ fn ableton_timestamped_audio_is_daw_project() {
 
 #[test]
 fn construction_kit_drums_and_mixes() {
+    // With kits split by instrument (Construction Kits category deleted).
+    let mut cfg = default_config();
+    cfg.categories.retain(|n| n.id != "construction-kits");
+    let split = Classifier::new(CompiledConfig::compile(&cfg).unwrap());
     let long = AudioMeta { duration_secs: Some(15.0), ..Default::default() };
-    let r = run_with(&classifier(), "Kits/V/VDE2 128BPM Magic Kit/VDE2 128BPM Magic Drums 1.wav", Some(&long));
+    let r = run_with(&split, "Kits/V/VDE2 128BPM Magic Kit/VDE2 128BPM Magic Drums 1.wav", Some(&long));
     assert_eq!(r.category_path, "Drum Loops/Full Loops", "{:#?}", r.evidence);
-    let r = run_with(&classifier(), "Kits/V/VTDS1 Kits/VTDS1 Electro Kit 128BPM 06 - Dance Now Kit - Drum Mix.wav", Some(&long));
+    let r = run_with(&split, "Kits/V/VTDS1 Kits/VTDS1 Electro Kit 128BPM 06 - Dance Now Kit - Drum Mix.wav", Some(&long));
     assert_eq!(r.category_path, "Drum Loops/Full Loops", "{:#?}", r.evidence);
 }
 
@@ -639,4 +643,39 @@ fn siblings_alone_never_confirm() {
     let out = classify_batch(&items, &c);
     let q = out[8].as_ref().unwrap();
     assert!(q.confidence <= SIBLING_ONLY_CAP, "{} {:#?}", q.confidence, q.evidence);
+}
+
+// ---------- construction kits ----------
+
+#[test]
+fn construction_kits_stay_together() {
+    for (path, kit_sub) in [
+        ("Kits/vengeance/Vengeance - Future House Vol.3/VFH3 128BPM Shakin Kit/VFH3 128BPM Shakin Kit 5.wav", "VFH3 128BPM Shakin Kit"),
+        ("Kits/V/VDE1 128BPM Entourage Kit/VDE 128BPM Entourage Drums 7.wav", "VDE1 128BPM Entourage Kit"),
+        ("Kits/V/VTS1/134BPM - Lovely Day Kit - Cmajor/Unlooped/VTS1 Lovely Day Kit 134BPM Mainlead.wav", "134BPM - Lovely Day Kit - Cmajor/Unlooped"),
+        ("Kits/V/VTDS1 Construction Kits 128BPM - 140BPM/VTDS1 Electro Kit 128BPM 06 Dance Now Kit/x - Drum Mix.wav", "VTDS1 Electro Kit 128BPM 06 Dance Now Kit"),
+        ("Kits/V/VPE1 Construction Kits/Root Kit/VPE1 Root Kit Mix.wav", "Root Kit"),
+    ] {
+        let r = run(path);
+        assert_eq!(r.category_path, "Construction Kits", "{path} {:#?}", r.evidence);
+        assert_eq!(r.subfolder.as_deref(), Some(kit_sub), "{path}");
+        assert!(r.confidence >= 0.6);
+    }
+}
+
+#[test]
+fn drum_kits_are_not_construction_kits() {
+    expect("Kits/Trap Drum Kit 140 BPM/Kicks/Kick 01.wav", "Kicks");
+    expect("Kits/flowerz drumkit @someone/Snares/snare 1.wav", "Snares");
+    expect("Kits/Utopia Sound Kit/Kick_01.wav", "Kicks");
+    expect("Kits/V/VFH2 Various Mini Kits/Kick_01.wav", "Kicks");
+}
+
+#[test]
+fn kits_off_when_category_deleted() {
+    let mut cfg = default_config();
+    cfg.categories.retain(|n| n.id != "construction-kits");
+    let c = Classifier::new(CompiledConfig::compile(&cfg).unwrap());
+    let r = run_with(&c, "Kits/V/VFH3 128BPM Shakin Kit/VFH3 128BPM Shakin Drums 1.wav", None);
+    assert_ne!(r.category_path, "Construction Kits");
 }

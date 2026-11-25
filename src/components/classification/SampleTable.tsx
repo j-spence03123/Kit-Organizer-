@@ -49,7 +49,12 @@ interface Props {
 
 function destination(r: SampleRow, root: string): string {
   if (r.destinationPath) return r.destinationPath;
-  return `${root}/${r.categoryPath}/${r.originalFilename}`;
+  return `${root}/${relativeDestination(r)}`;
+}
+
+/** Category path plus any kit folder, then the filename. */
+export function relativeDestination(r: SampleRow): string {
+  return [r.categoryPath, r.subfolder, r.originalFilename].filter(Boolean).join("/");
 }
 
 export function SampleTable(props: Props) {
@@ -138,7 +143,7 @@ export function SampleTable(props: Props) {
                 {c === "confidence" && <ConfidenceBar value={r.confidence} threshold={threshold} />}
                 {c === "destination" && (
                   <span title={destination(r, rootFolder)} className="font-mono text-[11px] text-faint">
-                    {r.destinationPath ?? `…/${r.categoryPath}/${r.originalFilename}`}
+                    {r.destinationPath ?? `…/${relativeDestination(r)}`}
                   </span>
                 )}
                 {c === "status" && <StatusBadge row={r} threshold={threshold} />}

@@ -111,6 +111,21 @@ pub fn validate_output(output_dir: &Path, root_folder: &str, sources: &[PathBuf]
     Ok(library)
 }
 
+/// Make one folder name safe on every OS (no separators, no `..`, no
+/// reserved characters or trailing dots/spaces).
+pub fn safe_segment(s: &str) -> String {
+    let cleaned: String = s
+        .chars()
+        .map(|c| if matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || c.is_control() { '_' } else { c })
+        .collect();
+    let t = cleaned.trim().trim_end_matches('.').trim().to_string();
+    if t == "." || t == ".." {
+        String::new()
+    } else {
+        t
+    }
+}
+
 pub fn build_plan(samples: &[SampleRow], opts: &PlanOptions) -> CoreResult<Plan> {
     let mut ops = Vec::with_capacity(samples.len());
     let mut s = PlanSummary::default();
@@ -201,6 +216,13 @@ pub fn build_plan(samples: &[SampleRow], opts: &PlanOptions) -> CoreResult<Plan>
         let mut dir = opts.library_root.to_path_buf();
         for seg in op.category_path.split('/').filter(|x| !x.is_empty()) {
             dir.push(seg);
+        }
+        // A construction kit's own folder (only when the file stays in the
+        // category that set it, not when rerouted to Uncategorised).
+        if let Some(sub) = r.subfolder.as_deref().filter(|_| op.category_id == r.category_id) {
+            for seg in sub.split('/').map(safe_segment).filter(|x| !x.is_empty()) {
+                dir.push(seg);
+            }
         }
         let (dest, renamed) = unique_path(&dir, &r.original_filename, &claimed);
         if renamed {

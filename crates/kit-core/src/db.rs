@@ -220,7 +220,7 @@ fn from_json<T: for<'de> Deserialize<'de> + Default>(s: Option<String>) -> T {
 
 const SAMPLE_COLS: &str = "id, import_id, original_path, original_filename, original_dir, relative_dir, source_pack, size, hash, \
     file_kind, category_id, category_path, confidence, evidence, alternatives, sample_type, bpm, bpm_source, musical_key, method, \
-    audio, manual_override, reviewed, status, duplicate_of, duplicate_path, dup_decision, destination_path, error, created_at, updated_at, key_source";
+    audio, manual_override, reviewed, status, duplicate_of, duplicate_path, dup_decision, destination_path, error, created_at, updated_at, key_source, subfolder";
 
 fn sample_from_row(r: &Row) -> rusqlite::Result<SampleRow> {
     let kind: String = r.get(9)?;
@@ -265,6 +265,7 @@ fn sample_from_row(r: &Row) -> rusqlite::Result<SampleRow> {
         created_at: r.get(29)?,
         updated_at: r.get(30)?,
         key_source: r.get(31)?,
+        subfolder: r.get(32)?,
     })
 }
 
@@ -320,6 +321,9 @@ impl Database {
         if !has_col("samples", "key_source")? {
             conn.execute("ALTER TABLE samples ADD COLUMN key_source TEXT", [])?;
         }
+        if !has_col("samples", "subfolder")? {
+            conn.execute("ALTER TABLE samples ADD COLUMN subfolder TEXT", [])?;
+        }
         conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '1')", [])?;
         Ok(Self { conn })
     }
@@ -352,7 +356,12 @@ impl Database {
     pub fn category_config(&self) -> CoreResult<CategoryConfig> {
         match self.get_setting("categories")? {
             Some(s) => match CategoryConfig::from_json(&s) {
-                Ok(c) => Ok(c),
+                Ok(mut c) => {
+                    if crate::config::upgrade(&mut c) && crate::config::CompiledConfig::compile(&c).is_ok() {
+                        self.put_setting("categories", &json(&c))?;
+                    }
+                    Ok(c)
+                }
                 Err(_) => Ok(default_config()),
             },
             None => Ok(default_config()),
@@ -443,7 +452,7 @@ impl Database {
         let tx = self.conn.transaction()?;
         {
             let mut st = tx.prepare(&format!(
-                "INSERT INTO samples({SAMPLE_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32)"
+                "INSERT INTO samples({SAMPLE_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33)"
             ))?;
             for s in rows {
                 st.execute(params![
@@ -479,6 +488,7 @@ impl Database {
                     s.created_at,
                     s.updated_at,
                     s.key_source,
+                    s.subfolder,
                 ])?;
             }
         }
@@ -593,13 +603,19 @@ impl Database {
         let tx = self.conn.transaction()?;
         let mut n = 0;
         {
+            // Moving files into Construction Kits keeps them in a folder named
+            // after their own folder; moving them anywhere else clears it.
+            let into_kits = category_id == crate::classifier::KITS_ID;
             let mut st = tx.prepare(
-                "UPDATE samples SET category_id = ?1, category_path = ?2, manual_override = 1, reviewed = 1, updated_at = ?3 \
+                "UPDATE samples SET category_id = ?1, category_path = ?2, manual_override = 1, reviewed = 1, updated_at = ?3, \
+                 subfolder = CASE WHEN ?5 THEN \
+                   CASE WHEN instr(relative_dir, '/') > 0 THEN replace(relative_dir, rtrim(relative_dir, replace(relative_dir, '/', '')), '') ELSE relative_dir END \
+                 ELSE NULL END \
                  WHERE id = ?4 AND status = 'pending'",
             )?;
             let ts = now();
             for chunk in ids {
-                n += st.execute(params![category_id, category_path, ts, chunk])?;
+                n += st.execute(params![category_id, category_path, ts, chunk, into_kits])?;
             }
         }
         tx.commit()?;
@@ -662,7 +678,7 @@ impl Database {
         {
             let mut st = tx.prepare(
                 "UPDATE samples SET category_id=?2, category_path=?3, confidence=?4, evidence=?5, alternatives=?6, sample_type=?7, \
-                 bpm=?8, bpm_source=?9, musical_key=?10, method=?11, updated_at=?12, key_source=?13 WHERE id=?1 AND manual_override = 0 AND status='pending'",
+                 bpm=?8, bpm_source=?9, musical_key=?10, method=?11, updated_at=?12, key_source=?13, subfolder=?14 WHERE id=?1 AND manual_override = 0 AND status='pending'",
             )?;
             let ts = now();
             for s in rows {
@@ -679,7 +695,8 @@ impl Database {
                     s.key,
                     s.method,
                     ts,
-                    s.key_source
+                    s.key_source,
+                    s.subfolder
                 ])?;
             }
         }

@@ -63,7 +63,10 @@ export function SampleDetail({ row, threshold, editable, onReassign, onAccept, o
           <h3 className="text-xs font-semibold uppercase tracking-wide text-faint">Classification</h3>
           <StatusBadge row={row} threshold={threshold} />
         </div>
-        <div className="text-sm font-medium text-fg" data-selectable>{row.categoryPath}</div>
+        <div className="text-sm font-medium text-fg" data-selectable>
+          {row.categoryPath}
+          {row.subfolder && <span className="text-muted"> / {row.subfolder}</span>}
+        </div>
         <div className="flex flex-wrap gap-1.5">
           <Badge tone={row.confidence >= threshold ? "ok" : "warn"}>{percent(row.confidence)} confidence</Badge>
           <Badge>{row.sampleType}</Badge>

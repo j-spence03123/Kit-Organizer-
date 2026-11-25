@@ -65,7 +65,7 @@ function row(id: string, name: string, cat: string, conf: number): SampleRow {
   return {
     id, importId: "imp1", originalPath: `/packs/XLNT/${name}`, originalFilename: name, originalDir: "/packs/XLNT", relativeDir: "XLNT",
     sourcePack: "XLNT", size: 1000, hash: `h-${id}`, fileKind: "audio", categoryId: cat.toLowerCase(), categoryPath: cat, confidence: conf,
-    evidence: [`Filename contains "${name}" → ${cat} (+3.00)`], alternatives: [], sampleType: "one-shot", bpm: null, bpmSource: null, key: null, keySource: null,
+    evidence: [`Filename contains "${name}" → ${cat} (+3.00)`], alternatives: [], sampleType: "one-shot", bpm: null, bpmSource: null, key: null, keySource: null, subfolder: null,
     method: "filename", audio: null, manualOverride: false, reviewed: false, status: "pending", duplicateOf: null, duplicatePath: null,
     dupDecision: null, destinationPath: null, error: null, createdAt: "", updatedAt: "",
   };

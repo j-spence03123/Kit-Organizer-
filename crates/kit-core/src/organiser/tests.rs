@@ -392,3 +392,36 @@ fn rerouted_low_confidence_files_record_their_real_category() {
     let tree = db.library_tree().unwrap();
     assert!(tree.iter().any(|(p, _)| p == "Uncategorised"));
 }
+
+#[test]
+fn construction_kits_get_their_own_folder() {
+    let e = env();
+    write(&e.src.join("VFH3 128BPM Shakin Kit/VFH3 128BPM Shakin Kit 5.wav"), b"part5");
+    write(&e.src.join("VFH3 128BPM Shakin Kit/Unlooped/VFH3 128BPM Shakin Lead.wav"), b"lead");
+    let id = import(&e, DuplicateHandling::Skip);
+    let p = plan_for(&e, &id, OpMode::Copy);
+    execute(&e.db, &id, &p, &AtomicBool::new(false), &|_| {}).unwrap();
+    let kit = lib(&e).join("Construction Kits/VFH3 128BPM Shakin Kit");
+    assert!(kit.join("VFH3 128BPM Shakin Kit 5.wav").exists());
+    assert!(kit.join("Unlooped/VFH3 128BPM Shakin Lead.wav").exists());
+}
+
+#[test]
+fn moving_files_into_kits_uses_their_folder_name() {
+    let e = env();
+    let id = import(&e, DuplicateHandling::Skip);
+    let mut db = e.db.lock().unwrap();
+    let rows = db.samples_for_import(&id).unwrap();
+    let growl = rows.iter().find(|r| r.original_filename == "Growl_F.wav").unwrap().id.clone();
+    db.reassign(std::slice::from_ref(&growl), "construction-kits", "Construction Kits").unwrap();
+    assert_eq!(db.get_sample(&growl).unwrap().unwrap().subfolder.as_deref(), Some("Bass"));
+    db.reassign(std::slice::from_ref(&growl), "kicks", "Kicks").unwrap();
+    assert_eq!(db.get_sample(&growl).unwrap().unwrap().subfolder, None);
+}
+
+#[test]
+fn unsafe_kit_folder_names_are_sanitised() {
+    assert_eq!(plan::safe_segment("Kit: A/B?"), "Kit_ A_B_");
+    assert_eq!(plan::safe_segment(".."), "");
+    assert_eq!(plan::safe_segment("Name. "), "Name");
+}

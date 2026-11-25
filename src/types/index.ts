@@ -142,6 +142,7 @@ export interface Classification {
   key: string | null;
   keySource: string | null;
   method: string;
+  subfolder?: string | null;
 }
 
 export interface SampleRow {
@@ -166,6 +167,8 @@ export interface SampleRow {
   key: string | null;
   keySource: string | null;
   method: string;
+  /** Extra folders below the category (a construction kit's own folder). */
+  subfolder: string | null;
   audio: AudioMeta | null;
   manualOverride: boolean;
   reviewed: boolean;

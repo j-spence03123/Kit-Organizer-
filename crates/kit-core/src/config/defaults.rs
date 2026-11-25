@@ -236,6 +236,10 @@ fn tree() -> Vec<B> {
             c("Vocal FX", &["vocal fx", "vox fx", "vocal effect", "vocal effects", "vocoder", "talkbox", "vocal riser", "vocal sweep"]),
             c("Other Vocals", &["other vocal", "misc vocal"]),
         ]),
+        // Construction kits are kept together, one folder per kit (see
+        // classifier::construction_kit). Delete this category to split kits
+        // by instrument instead.
+        c("Construction Kits", &["construction kit", "construction kits", "song kit", "song kits"]),
         c("MIDI", &["midi", "midis", "midi file", "midi files"]),
         c("Presets", &["preset", "presets"]),
         c("Uncategorised", &[]),
@@ -245,7 +249,7 @@ fn tree() -> Vec<B> {
 pub fn default_config() -> CategoryConfig {
     let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
     CategoryConfig {
-        version: 1,
+        version: super::CONFIG_VERSION,
         root_folder: "Organised Samples".into(),
         categories: tree().into_iter().map(|b| build(b, "")).collect(),
         weights: ClassifierWeights::default(),

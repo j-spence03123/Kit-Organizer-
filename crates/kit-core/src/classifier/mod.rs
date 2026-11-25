@@ -430,6 +430,9 @@ pub struct Classification {
     #[serde(default)]
     pub key_source: Option<String>,
     pub method: String,
+    /// Extra folders below the category (a construction kit's own folder).
+    #[serde(default)]
+    pub subfolder: Option<String>,
 }
 
 impl Classification {
@@ -480,6 +483,33 @@ impl Classifier {
     pub fn classify(&self, input: &ClassifyInput) -> Classification {
         let cfg = &self.cfg;
         let stem = stem(input.file_name);
+        if matches!(input.kind, FileKind::Audio | FileKind::Midi) {
+            if let (Some(&kits), Some((idx, why))) = (cfg.by_id.get(KITS_ID), construction_kit(input.folders)) {
+                if daw_project_with_name(input.folders, input.file_name).is_none() {
+                    let sub = input.folders[idx..].join("/");
+                    let bpm = musical::bpm_from_name(stem).or_else(|| musical::bpm_from_name(&input.folders[idx]));
+                    let (key, key_source) = key_of(stem, input.audio);
+                    return Classification {
+                        category_id: cfg.nodes[kits].id.clone(),
+                        category_path: cfg.path_of(kits).to_string(),
+                        confidence: 0.9,
+                        evidence: vec![format!(
+                            "Part of construction kit “{}” ({why}) — kept together in its own folder",
+                            input.folders[idx]
+                        )],
+                        alternatives: vec![],
+                        sample_type: if input.kind == FileKind::Midi { SampleType::Midi } else { SampleType::Loop },
+                        loop_score: None,
+                        bpm,
+                        bpm_source: bpm.map(|_| "filename".into()),
+                        key,
+                        key_source,
+                        method: "construction-kit".into(),
+                        subfolder: Some(sub),
+                    };
+                }
+            }
+        }
         let ext = input.file_name.rsplit_once('.').map(|(_, e)| e.to_lowercase()).unwrap_or_default();
         match input.kind {
             FileKind::Midi => return self.fixed(cfg.midi, SampleType::Midi, format!("File type .{ext} is MIDI"), stem),
@@ -509,6 +539,7 @@ impl Classifier {
                 key: None,
                 key_source: None,
                 method: "pack-demo".into(),
+                subfolder: None,
             };
         }
         if let Some(why) = daw_project_with_name(input.folders, input.file_name) {
@@ -525,6 +556,7 @@ impl Classifier {
                 key: None,
                 key_source: None,
                 method: "daw-project".into(),
+                subfolder: None,
             };
         }
         let n_folders = input.folders.len();
@@ -713,6 +745,7 @@ impl Classifier {
                 key,
                 key_source,
                 method: "fallback".into(),
+                subfolder: None,
             };
         }
 
@@ -771,6 +804,7 @@ impl Classifier {
                 key,
                 key_source,
                 method: "fallback".into(),
+                subfolder: None,
             };
         }
         let related = |a: usize, b: usize| a == b || is_ancestor(&cfg.nodes, a, b) || is_ancestor(&cfg.nodes, b, a);
@@ -907,6 +941,7 @@ impl Classifier {
             key,
             key_source,
             method,
+            subfolder: None,
         }
     }
 
@@ -924,6 +959,7 @@ impl Classifier {
             key: musical::key_from_name(stem),
             key_source: musical::key_from_name(stem).map(|_| "filename".into()),
             method: "file-type".into(),
+            subfolder: None,
         }
     }
 }
@@ -973,6 +1009,40 @@ pub fn daw_project_with_name(folders: &[String], file_name: &str) -> Option<&'st
         }
     }
     None
+}
+
+/// Id of the category that keeps construction kits together.
+pub const KITS_ID: &str = "construction-kits";
+
+/// Find the construction-kit folder a file lives in, if any. Returns the
+/// index of the (deepest) kit folder in `folders` and why it matched.
+///
+/// A kit folder is either a folder whose name has "kit" and a BPM
+/// ("VFH3 128BPM Shakin Kit", "134BPM - Lovely Day Kit - Cmajor"), or a
+/// folder directly inside a "Construction Kits"/"Song Kits" folder. Drum
+/// kits ("Trap Drum Kit", "drumkit") are never construction kits.
+pub fn construction_kit(folders: &[String]) -> Option<(usize, &'static str)> {
+    let mut found = None;
+    for (i, f) in folders.iter().enumerate() {
+        let toks = fine_tokens(f);
+        let has = |w: &str| toks.iter().any(|t| t == w);
+        let kit_word = toks.iter().any(|t| t == "kit" || t == "kits");
+        let drum_kit = toks.iter().any(|t| t == "drumkit" || t == "drumkits")
+            || toks.windows(2).any(|w| (w[0] == "drum" || w[0] == "drums") && (w[1] == "kit" || w[1] == "kits"));
+        let container = (has("construction") && kit_word) || (has("song") && kit_word);
+        if kit_word && !drum_kit && musical::bpm_from_name(f).is_some() {
+            found = Some((i, "kit folder with a tempo"));
+        }
+        if container && i + 1 < folders.len() {
+            let child = &folders[i + 1];
+            let ct = fine_tokens(child);
+            let child_is_drum_kit = ct.windows(2).any(|w| w[0] == "drum" && w[1] == "kit");
+            if !child_is_drum_kit && found.is_none_or(|(j, _)| j < i + 1) {
+                found = Some((i + 1, "folder inside a construction-kits folder"));
+            }
+        }
+    }
+    found
 }
 
 /// Maximum confidence from sibling context alone (below the default 60%

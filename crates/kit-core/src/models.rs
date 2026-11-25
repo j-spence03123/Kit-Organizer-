@@ -202,6 +202,9 @@ pub struct SampleRow {
     #[serde(default)]
     pub key_source: Option<String>,
     pub method: String,
+    /// Extra folders below the category (a construction kit's folder).
+    #[serde(default)]
+    pub subfolder: Option<String>,
     pub audio: Option<AudioMeta>,
     pub manual_override: bool,
     pub reviewed: bool,

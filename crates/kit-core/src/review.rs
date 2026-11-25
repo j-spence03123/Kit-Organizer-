@@ -156,6 +156,8 @@ pub fn patterns_for(cfg: &CompiledConfig, rows: &[SampleRow], category: Option<&
     let mut seen = std::collections::HashSet::new();
     rows.iter()
         .filter(|r| category.is_some() || r.category_id != cfg.nodes[cfg.uncategorised].id)
+        // Kit membership comes from the folder, not the name: nothing to learn.
+        .filter(|r| category.unwrap_or(&r.category_id) != crate::classifier::KITS_ID)
         .filter_map(|r| {
             let folders: Vec<String> = r.relative_dir.split('/').filter(|s| !s.is_empty()).map(String::from).collect();
             let p = pattern_of(cfg, &r.original_filename, &folders)?;
@@ -227,6 +229,7 @@ mod tests {
             key: None,
             key_source: None,
             method: cl.method,
+            subfolder: cl.subfolder,
             audio: None,
             manual_override: false,
             reviewed: false,

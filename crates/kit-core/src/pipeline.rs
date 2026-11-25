@@ -255,6 +255,7 @@ pub fn build_rows(
             key: c.key,
             key_source: c.key_source,
             method: c.method,
+            subfolder: c.subfolder,
             audio: a.audio,
             manual_override: false,
             reviewed: false,
@@ -305,6 +306,7 @@ pub fn reclassify(rows: &[SampleRow], classifier: &Classifier) -> Vec<SampleRow>
             n.key = c.key;
             n.key_source = c.key_source;
             n.method = c.method;
+            n.subfolder = c.subfolder;
             Some(n)
         })
         .collect()

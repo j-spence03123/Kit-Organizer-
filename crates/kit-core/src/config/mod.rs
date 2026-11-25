@@ -9,6 +9,29 @@ mod defaults;
 
 pub use defaults::default_config;
 
+/// Current configuration format version.
+pub const CONFIG_VERSION: u32 = 2;
+
+/// Bring an older saved configuration up to date. Returns true if changed.
+/// v2 adds the Construction Kits category (only once: deleting it later is
+/// respected because the version is then already 2).
+pub fn upgrade(cfg: &mut CategoryConfig) -> bool {
+    if cfg.version >= CONFIG_VERSION {
+        return false;
+    }
+    if cfg.version < 2 && !cfg.categories.iter().any(|n| n.id == "construction-kits") {
+        if let Some(kits) = default_config().categories.into_iter().find(|n| n.id == "construction-kits") {
+            let names: HashSet<String> = cfg.categories.iter().map(|n| n.name.to_lowercase()).collect();
+            if !names.contains(&kits.name.to_lowercase()) {
+                let at = cfg.categories.iter().position(|n| n.id == cfg.midi_category).unwrap_or(cfg.categories.len());
+                cfg.categories.insert(at, kits);
+            }
+        }
+    }
+    cfg.version = CONFIG_VERSION;
+    true
+}
+
 use crate::error::{CoreError, CoreResult};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -529,6 +552,20 @@ mod tests {
         let mut cfg = default_config();
         cfg.categories[0].loop_target = Some("nope".into());
         assert!(CompiledConfig::compile(&cfg).is_err());
+    }
+
+    #[test]
+    fn upgrade_adds_construction_kits_once() {
+        let mut old = default_config();
+        old.categories.retain(|n| n.id != "construction-kits");
+        old.version = 1;
+        assert!(upgrade(&mut old));
+        assert!(old.categories.iter().any(|n| n.id == "construction-kits"));
+        CompiledConfig::compile(&old).unwrap();
+        // Deleted after upgrading: stays deleted.
+        old.categories.retain(|n| n.id != "construction-kits");
+        assert!(!upgrade(&mut old));
+        assert!(!old.categories.iter().any(|n| n.id == "construction-kits"));
     }
 
     #[test]

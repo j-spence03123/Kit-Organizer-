@@ -20,6 +20,7 @@ Some Pack/Melodic/Piano_Melody_140BPM.wav                 →  Organised Samples
 - **Drag and drop import.** Add one or many pack folders, scan them recursively (any depth) and cancel at any time.
 - **Rule-based classifier** that uses folder context, filenames, embedded tags, loop/one-shot detection and (optionally) simple audio analysis. Every result comes with a confidence score, the evidence behind it and alternative categories.
 - **Learns from your corrections.** Reassign `XLNT_Shot_03.wav` once and every file named like it, in this import or future ones, follows. Kit Organizer also offers to fix the matching files immediately.
+- **Keeps construction kits together.** A kit folder (a "Kit" folder with a tempo, like `VFH3 128BPM Shakin Kit`, or any folder inside "Construction Kits"/"Song Kits") goes to `Construction Kits/<kit name>/` with all its parts and sub-folders. Drum kits are not treated as construction kits. To split kits by instrument instead, delete the Construction Kits category.
 - **Uses the other files in each folder.** A vaguely named file among confidently classified kicks is treated as a kick.
 - **Tolerates messy names:** typos (`Snere`), run-together words (`growlbass`), vendor prefixes (`XLNT_`, `BOS_TT_`) and context-dependent words (`roll` counts as a drum fill only next to a drum word).
 - **Preview before anything changes.** Every proposed destination appears in a searchable, sortable review table. Files below your confidence threshold are flagged for review.
