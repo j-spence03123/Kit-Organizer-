@@ -130,6 +130,8 @@ pub struct SampleQuery {
     pub source_pack: Option<String>,
     /// Exact folder chain (as stored in `relative_dir`).
     pub relative_dir: Option<String>,
+    /// Folder chain or anything below it.
+    pub relative_dir_prefix: Option<String>,
     /// Exact category id.
     pub category_id: Option<String>,
     pub sort: Option<String>,
@@ -544,6 +546,12 @@ impl Database {
         }
         if let Some(d) = &q.relative_dir {
             where_.push(format!("relative_dir = {}", bind(V::Text(d.clone()))));
+        }
+        if let Some(d) = &q.relative_dir_prefix {
+            // substr comparison avoids LIKE-escaping folder names with % or _.
+            let p = bind(V::Text(d.clone()));
+            let ps = bind(V::Text(format!("{d}/")));
+            where_.push(format!("(relative_dir = {p} OR substr(relative_dir, 1, length({ps})) = {ps})"));
         }
         if let Some(c) = &q.category_id {
             where_.push(format!("category_id = {}", bind(V::Text(c.clone()))));

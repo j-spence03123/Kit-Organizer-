@@ -51,7 +51,7 @@ export const api = {
   importSummary: (importId: string) => invoke<ImportSummary>("import_summary", { importId }),
   reassignSamples: (ids: string[], categoryId: string) =>
     invoke<number>("reassign_samples", { ids, categoryId }),
-  reviewOverview: (importId: string) => invoke<ReviewOverview>("review_overview", { importId }),
+  reviewOverview: (importId: string, upLevels = 0) => invoke<ReviewOverview>("review_overview", { importId, upLevels }),
   acceptMatching: (query: SampleQuery) => invoke<BulkResult>("accept_matching", { query }),
   reassignMatching: (query: SampleQuery, categoryId: string) => invoke<BulkResult>("reassign_matching", { query, categoryId }),
   exportReviewList: (importId: string, path: string) => invoke<number>("export_review_list", { importId, path }),

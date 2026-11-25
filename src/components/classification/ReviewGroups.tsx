@@ -5,7 +5,7 @@ import { api, errorMessage } from "../../services/api";
 import { pickTextSavePath } from "../../services/dialogs";
 import type { BulkResult, ReviewGroup, ReviewOverview, SampleQuery } from "../../types";
 import { formatNumber, percent } from "../../utils/format";
-import { Badge, Button, EmptyState, ProgressBar } from "../ui";
+import { Badge, Button, EmptyState, ProgressBar, Segmented } from "../ui";
 import { CategoryPicker } from "./CategoryPicker";
 
 interface Props {
@@ -23,13 +23,14 @@ export function ReviewGroups({ importId, threshold, editable, version, onShowFil
   const { toast, config } = useApp();
   const [ov, setOv] = useState<ReviewOverview | null>(null);
   const [busy, setBusy] = useState(false);
+  const [level, setLevel] = useState<"0" | "1">("0");
 
   const load = useCallback(() => {
     api
-      .reviewOverview(importId)
+      .reviewOverview(importId, Number(level))
       .then(setOv)
       .catch((e) => toast(errorMessage(e), "error"));
-  }, [importId, toast]);
+  }, [importId, toast, level]);
   useEffect(load, [load, version]);
 
   const report = (verb: string, r: BulkResult) => {
@@ -53,7 +54,7 @@ export function ReviewGroups({ importId, threshold, editable, version, onShowFil
   const groupQuery = (g: ReviewGroup): SampleQuery => ({
     importId,
     needsReviewBelow: threshold,
-    relativeDir: g.folder,
+    ...(g.includesSubfolders ? { relativeDirPrefix: g.folder } : { relativeDir: g.folder }),
     categoryId: g.categoryId,
   });
 
@@ -127,13 +128,27 @@ export function ReviewGroups({ importId, threshold, editable, version, onShowFil
         </div>
       </section>
 
+      <div className="flex items-center gap-3 text-xs text-muted">
+        <span>Group by</span>
+        <Segmented
+          ariaLabel="Group by"
+          value={level}
+          onChange={setLevel}
+          options={[
+            { value: "0", label: "Folder" },
+            { value: "1", label: "Parent folder" },
+          ]}
+        />
+        <span className="text-faint">Parent folder merges sibling folders (e.g. every kit in a pack) into fewer, bigger groups.</span>
+      </div>
+
       <ul className="divide-y divide-line rounded-lg border border-line bg-panel" aria-label="Review groups">
         {ov.groups.map((g) => (
           <li key={`${g.folder}|${g.categoryId}`} className="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-2.5">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-[13px]">
                 <FolderOpen size={13} className="shrink-0 text-faint" />
-                <span className="truncate text-muted" title={g.folder}>{g.folder}</span>
+                <span className="truncate text-muted" title={g.folder}>{g.folder}{g.includesSubfolders ? "/…" : ""}</span>
                 <span className="shrink-0 text-faint">→</span>
                 <span className={g.categoryId === unc ? "shrink-0 text-warn" : "shrink-0 text-fg"}>{g.categoryPath}</span>
                 <Badge className="shrink-0">{formatNumber(g.count)}</Badge>

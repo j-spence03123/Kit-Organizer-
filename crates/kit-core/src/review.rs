@@ -23,6 +23,8 @@ pub struct ReviewGroup {
     pub examples: Vec<String>,
     /// Most common reason the files in this group are uncertain.
     pub reason: String,
+    /// The group covers sub-folders of `folder` too.
+    pub includes_subfolders: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -67,12 +69,29 @@ pub fn reason(r: &SampleRow, uncategorised_id: &str) -> &'static str {
     }
 }
 
+/// Group the queue. `up_levels` = 0 groups by each file's folder; 1 groups
+/// by the folder above it (merging e.g. every kit folder of a pack).
 pub fn overview(rows: &[SampleRow], threshold: f32, uncategorised_id: &str, max_groups: usize) -> ReviewOverview {
+    overview_at(rows, threshold, uncategorised_id, max_groups, 0)
+}
+
+fn folder_at(dir: &str, up: usize) -> &str {
+    let mut end = dir.len();
+    for _ in 0..up {
+        match dir[..end].rfind('/') {
+            Some(i) if i > 0 => end = i,
+            _ => break,
+        }
+    }
+    &dir[..end]
+}
+
+pub fn overview_at(rows: &[SampleRow], threshold: f32, uncategorised_id: &str, max_groups: usize, up_levels: usize) -> ReviewOverview {
     let mut groups: HashMap<(&str, &str), Vec<&SampleRow>> = HashMap::new();
     let mut reasons: HashMap<&'static str, usize> = HashMap::new();
     let (mut unc, mut near, mut low) = (0, 0, 0);
     for r in rows {
-        groups.entry((r.relative_dir.as_str(), r.category_id.as_str())).or_default().push(r);
+        groups.entry((folder_at(&r.relative_dir, up_levels), r.category_id.as_str())).or_default().push(r);
         *reasons.entry(reason(r, uncategorised_id)).or_default() += 1;
         if r.category_id == uncategorised_id {
             unc += 1;
@@ -91,6 +110,7 @@ pub fn overview(rows: &[SampleRow], threshold: f32, uncategorised_id: &str, max_
             }
             let reason = rc.into_iter().max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(a.0))).map(|(k, _)| k).unwrap_or("");
             ReviewGroup {
+                includes_subfolders: items.iter().any(|r| r.relative_dir != folder),
                 folder: folder.to_string(),
                 category_id: cat.to_string(),
                 category_path: items[0].category_path.clone(),
@@ -213,6 +233,33 @@ mod tests {
             created_at: now(),
             updated_at: now(),
         }
+    }
+
+    #[test]
+    fn grouping_one_level_up_merges_kits() {
+        assert_eq!(folder_at("Kits/Pack/Kit A", 1), "Kits/Pack");
+        assert_eq!(folder_at("Kits", 1), "Kits");
+        let cfg = CompiledConfig::compile(&default_config()).unwrap();
+        let c = Classifier::new(cfg);
+        let rows: Vec<SampleRow> = (0..6).map(|i| row(i, &format!("Pack/Kit {}", i % 3), &format!("Pack_Thump_{i}.wav"), &c)).collect();
+        assert_eq!(overview_at(&rows, 0.6, "uncategorised", 50, 0).groups.len(), 3);
+        let up = overview_at(&rows, 0.6, "uncategorised", 50, 1);
+        assert_eq!(up.groups.len(), 1);
+        assert!(up.groups[0].includes_subfolders);
+    }
+
+    #[test]
+    fn prefix_query_matches_subfolders_only() {
+        let db = Database::open_in_memory().unwrap();
+        db.create_import(&ImportRecord {
+            id: "imp".into(), created_at: now(), completed_at: None, sources: vec![], output_dir: String::new(), library_root: String::new(),
+            mode: OpMode::Copy, status: ImportStatus::Review, stats: ImportStats::default(), messages: vec![],
+        }).unwrap();
+        let c = Classifier::new(CompiledConfig::compile(&default_config()).unwrap());
+        let mut db = db;
+        db.insert_samples(&[row(1, "Pack/Kit_A", "a.wav", &c), row(2, "Pack/Kit_A/Sub", "b.wav", &c), row(3, "Pack/Kit_AB", "c.wav", &c)]).unwrap();
+        let n = db.matching_samples(&SampleQuery { relative_dir_prefix: Some("Pack/Kit_A".into()), ..Default::default() }).unwrap().len();
+        assert_eq!(n, 2, "Kit_AB must not match the Kit_A prefix");
     }
 
     #[test]

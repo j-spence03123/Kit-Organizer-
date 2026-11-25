@@ -432,14 +432,14 @@ fn learn(state: &AppState, rows: &[SampleRow], category: Option<&str>) -> CoreRe
 }
 
 #[tauri::command]
-pub async fn review_overview(app: AppHandle, import_id: String) -> CmdResult<review::ReviewOverview> {
+pub async fn review_overview(app: AppHandle, import_id: String, up_levels: Option<usize>) -> CmdResult<review::ReviewOverview> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let t = state.db().settings().map_err(err)?.confidence_threshold;
         let rows = review::pending_review(&state.db(), &import_id, t).map_err(err)?;
         let c = state.classifier();
         let unc = c.config().nodes[c.config().uncategorised].id.clone();
-        Ok(review::overview(&rows, t, &unc, 300))
+        Ok(review::overview_at(&rows, t, &unc, 300, up_levels.unwrap_or(0).min(3)))
     })
     .await
     .map_err(err)?

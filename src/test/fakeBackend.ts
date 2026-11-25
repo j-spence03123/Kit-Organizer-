@@ -145,8 +145,8 @@ export function createBackend() {
       low: 16,
       reasons: [["No recognisable keywords", 20], ["Only a broad category matched", 27]],
       groups: [
-        { folder: "XLNT/Drums", categoryId: "snares", categoryPath: "Snares", count: 12, avgConfidence: 0.52, examples: ["Snr_01.wav"], reason: "Weak single keyword" },
-        { folder: "XLNT", categoryId: "uncategorised", categoryPath: "Uncategorised", count: 1, avgConfidence: 0, examples: ["Mystery_01.wav"], reason: "No recognisable keywords" },
+        { folder: "XLNT/Drums", categoryId: "snares", categoryPath: "Snares", count: 12, avgConfidence: 0.52, examples: ["Snr_01.wav"], reason: "Weak single keyword", includesSubfolders: false },
+        { folder: "XLNT", categoryId: "uncategorised", categoryPath: "Uncategorised", count: 1, avgConfidence: 0, examples: ["Mystery_01.wav"], reason: "No recognisable keywords", includesSubfolders: false },
       ],
     }),
     acceptMatching: async (query: unknown): Promise<BulkResult> => {

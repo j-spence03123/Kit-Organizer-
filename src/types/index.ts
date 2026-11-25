@@ -190,6 +190,7 @@ export interface SampleQuery {
   duplicatesOnly?: boolean;
   sourcePack?: string | null;
   relativeDir?: string | null;
+  relativeDirPrefix?: string | null;
   categoryId?: string | null;
   sort?: string | null;
   descending?: boolean;
@@ -393,6 +394,7 @@ export interface ReviewGroup {
   avgConfidence: number;
   examples: string[];
   reason: string;
+  includesSubfolders: boolean;
 }
 
 export interface ReviewOverview {
