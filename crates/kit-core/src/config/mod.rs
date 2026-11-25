@@ -109,6 +109,14 @@ pub struct ClassifierWeights {
     /// Multiplier for audio-analysis evidence (0 disables it).
     #[serde(default = "d_audio")]
     pub audio: f32,
+    /// Points for "loop with a key but no instrument named" → Full Melody
+    /// Loops (only when nothing else matched).
+    #[serde(default = "d_key_loop")]
+    pub key_loop: f32,
+}
+
+fn d_key_loop() -> f32 {
+    2.5
 }
 
 fn d_metadata() -> f32 {
@@ -152,6 +160,7 @@ impl Default for ClassifierWeights {
             learned: d_learned(),
             sibling: d_sibling(),
             audio: d_audio(),
+            key_loop: d_key_loop(),
         }
     }
 }

@@ -63,6 +63,33 @@ fn quality(s: &str) -> Option<&'static str> {
 
 /// Musical key stated in the filename, normalised like `F#m`, `C`, `Ebm`.
 pub fn key_from_name(stem: &str) -> Option<String> {
+    // Note + octave in brackets, a common melody-kit convention: "(g4)", "[c#5]".
+    for (open, close) in [('(', ')'), ('[', ']')] {
+        let mut rest = stem;
+        while let Some(i) = rest.find(open) {
+            let after = &rest[i + 1..];
+            if let Some(j) = after.find(close) {
+                let inner = after[..j].trim();
+                let chars: Vec<char> = inner.chars().collect();
+                let note_octave = match chars.as_slice() {
+                    [n, d] => ('a'..='g').contains(&n.to_ascii_lowercase()) && d.is_ascii_digit(),
+                    [n, '#' | 'b', d] => ('a'..='g').contains(&n.to_ascii_lowercase()) && d.is_ascii_digit(),
+                    _ => false,
+                };
+                if note_octave {
+                    if let Some((note, _)) = parse_note(&inner[..inner.len() - 1]) {
+                        return Some(note);
+                    }
+                }
+                if let Some(k) = parse_key_token(inner, true).filter(|_| inner.len() <= 6) {
+                    return Some(k);
+                }
+                rest = &after[j..];
+            } else {
+                break;
+            }
+        }
+    }
     let toks: Vec<String> = coarse_tokens(stem);
     // Explicit "key" marker: "Key_Am", "key of F".
     for (i, t) in toks.iter().enumerate() {
@@ -90,6 +117,20 @@ pub fn key_from_name(stem: &str) -> Option<String> {
         }
         if let Some(k) = parse_key_token(t, false) {
             return Some(k);
+        }
+        // Lowercase keys are accepted only with an explicit quality word
+        // ("f#min", "gmaj") — a lowercase "am" is just a word.
+        if t.chars().next().is_some_and(|c| c.is_lowercase()) {
+            if let Some((note, rest)) = parse_note(t) {
+                if matches!(rest, "min" | "minor" | "maj" | "major") {
+                    return Some(format!("{note}{}", quality(rest).unwrap_or("")));
+                }
+            }
+            if let (Some((note, "")), Some(next)) = (parse_note(t), toks.get(i + 1)) {
+                if t.len() <= 2 && matches!(next.to_lowercase().as_str(), "minor" | "major") {
+                    return Some(format!("{note}{}", if next.eq_ignore_ascii_case("minor") { "m" } else { "" }));
+                }
+            }
         }
         // Bare uppercase note letter ("XLNT_Growl_F"): only near the end of
         // the name and never as the first token.
@@ -184,6 +225,17 @@ mod tests {
         assert_eq!(key_from_name("Kick_01"), None);
         assert_eq!(key_from_name("Big Room Drop"), None);
         assert_eq!(key_from_name("A Kick 01"), None);
+    }
+
+    #[test]
+    fn melody_kit_keys() {
+        assert_eq!(key_from_name("alien 155BPM (g4) [prod. slime jax]").as_deref(), Some("G"));
+        assert_eq!(key_from_name("kant sleep! 143BPM (c#5)").as_deref(), Some("C#"));
+        assert_eq!(key_from_name("cashier [133 BPM D minor] @someone").as_deref(), Some("Dm"));
+        assert_eq!(key_from_name("motion 140bpm f#min").as_deref(), Some("F#m"));
+        assert_eq!(key_from_name("loop 140 (Am)").as_deref(), Some("Am"));
+        assert_eq!(key_from_name("i am here 140bpm"), None);
+        assert_eq!(key_from_name("Kick (02)"), None);
     }
 
     #[test]

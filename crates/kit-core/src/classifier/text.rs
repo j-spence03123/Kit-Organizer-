@@ -204,10 +204,60 @@ pub fn match_tokens(cfg: &CompiledConfig, tokens: &[String], context: &HashSet<S
     out
 }
 
-/// Fine tokens of a filename stem with the vendor prefix removed and
-/// compounds expanded.
+/// Remove producer credits: `@handle`, `[prod. name]`, `(prod by name)`,
+/// and a trailing `prod. name`. They name people, not sounds, and their
+/// words could otherwise match keywords.
+pub fn strip_credits(stem: &str) -> String {
+    let mut s = String::with_capacity(stem.len());
+    let mut chars = stem.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '@' {
+            while chars.peek().is_some_and(|n| !n.is_whitespace() && !matches!(n, '[' | '(' | ')' | ']')) {
+                chars.next();
+            }
+            s.push(' ');
+            continue;
+        }
+        s.push(c);
+    }
+    let lower = s.to_lowercase();
+    // Bracketed credits.
+    let mut out = String::new();
+    let mut i = 0;
+    let b = s.as_bytes();
+    while i < s.len() {
+        let ch = b[i] as char;
+        if (ch == '[' || ch == '(') && lower[i + 1..].trim_start().starts_with("prod") {
+            let close = if ch == '[' { ']' } else { ')' };
+            match s[i..].find(close) {
+                Some(j) => {
+                    i += j + 1;
+                    out.push(' ');
+                    continue;
+                }
+                None => break,
+            }
+        }
+        let n = s[i..].chars().next().map(char::len_utf8).unwrap_or(1);
+        out.push_str(&s[i..i + n]);
+        i += n;
+    }
+    // Unbracketed "prod. by name" / "prod name" at the end.
+    let lo = out.to_lowercase();
+    if let Some(p) = lo.rfind(" prod") {
+        let tail = &lo[p + 5..];
+        if tail.starts_with('.') || tail.starts_with(' ') || tail.starts_with("by") || tail.starts_with("uced") {
+            out.truncate(p);
+        }
+    }
+    out
+}
+
+/// Fine tokens of a filename stem with credits and the vendor prefix
+/// removed and compounds expanded.
 pub fn name_tokens(cfg: &CompiledConfig, stem: &str) -> (Option<String>, Vec<String>) {
-    let (vendor, rest) = split_vendor(cfg, stem);
+    let cleaned = strip_credits(stem);
+    let (vendor, rest) = split_vendor(cfg, &cleaned);
     (vendor, expand_compounds(cfg, fine_tokens(&rest)))
 }
 
@@ -243,6 +293,16 @@ mod tests {
         assert_eq!(v("hihat"), ["hihat"], "known compounds are kept");
         assert_eq!(v("closedhat"), ["closedhat"]);
         assert_eq!(v("whatever"), ["whatever"]);
+    }
+
+    #[test]
+    fn credits() {
+        let t = |s: &str| fine_tokens(&strip_credits(s));
+        assert_eq!(t("cashier [133 BPM D minor] @fivethreesosa"), ["cashier", "133", "bpm", "d", "minor"]);
+        assert_eq!(t("alien 155BPM (g4) [prod. slime jax]"), ["alien", "155", "bpm", "g", "4"]);
+        assert_eq!(t("goons @a @b"), ["goons"]);
+        assert_eq!(t("Dark Keys 140 prod. by someone"), ["dark", "keys", "140"]);
+        assert_eq!(t("Kick_Prodigy_01"), ["kick", "prodigy", "01"]);
     }
 
     #[test]

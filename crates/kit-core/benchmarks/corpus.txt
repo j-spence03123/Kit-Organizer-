@@ -283,3 +283,13 @@ MIDI | Producer Pack/MIDI/Chords_Am.mid
 MIDI | Producer Pack/MIDI/Melody_140_Fm.midi
 Presets | Producer Pack/Serum Presets/BASS - Growl.fxp
 Presets | Producer Pack/Vital Presets/LD Supersaw.vital
+
+# ---------- Melody kits: song-style titles with BPM, key and producer tags ----------
+Melodic Loops/Full Melody Loops | Melody Kit Vol 1/cashmere [133 BPM D minor] @producerone.wav
+Melodic Loops/Full Melody Loops | Melody Kit Vol 1/delta force [156 BPM F# minor] @producerone.wav
+Melodic Loops/Full Melody Loops | Melody Kit Vol 1/goons [140 BPM E minor] @producerone @collab.wav
+Melodic Loops/Full Melody Loops | Melody Kit Vol 1/monsoon [153 BPM G# minor] @producerone.wav
+Melodic Loops/Full Melody Loops | Melody Kit Vol 1/phosphor [136 BPM E minor] @producerone.wav
+Melodic Loops/Piano Loops | Melody Kit Vol 1/heaven [128 BPM A minor] piano @producerone.wav
+Uncategorised | Drum Kit Nova/SINGLE 145 BPM NOVA.mp3
+Uncategorised | Basspop Multikit/BASSPOP MK1 - BUS VIBES.wav

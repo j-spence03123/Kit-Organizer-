@@ -509,6 +509,7 @@ impl Classifier {
                 meta_tokens: &prepared.meta_tokens,
                 folders: &loop_folders,
                 bpm_in_name: bpm_name.is_some(),
+                key_known: musical::key_from_name(stem).is_some() || input.audio.and_then(|a| a.tag_key.as_ref()).is_some(),
                 note_octave: musical::has_note_octave(stem),
                 audio: input.audio,
             },
@@ -544,6 +545,25 @@ impl Classifier {
                         loop_routed_nodes.insert(t);
                     }
                 }
+            }
+        }
+        // A loop with a stated key but no instrument named — "cashier [133
+        // BPM D minor]" — is almost always a composed melody loop. Only used
+        // when no keyword gave usable evidence (a pack named "Melody Kit"
+        // is too weak to count; a "Vocals" folder is not).
+        let strongest = evidence.iter().filter(|e| e.origin != Origin::Audio).map(|e| e.points).fold(0.0f32, f32::max);
+        if lp.is_loop && key.is_some() && strongest < w.min_score {
+            if let Some(&node) = cfg.by_id.get("melodic-loops/full-melody-loops") {
+                evidence.push(Evidence {
+                    node,
+                    points: w.key_loop,
+                    label: format!(
+                        "Loop with a musical key ({}) but no instrument named — typical of melody loops",
+                        key.as_deref().unwrap_or("")
+                    ),
+                    origin: Origin::Context,
+                    weak: false,
+                });
             }
         }
         // Audio analysis only *supports*: it is kept when nothing else is

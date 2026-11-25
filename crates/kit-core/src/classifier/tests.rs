@@ -169,9 +169,13 @@ fn loops_vs_one_shots() {
 
 #[test]
 fn bpm_alone_is_not_a_loop() {
-    let r = expect("P/Lead_128BPM_C.wav", "One-Shots/Leads");
+    let r = expect("P/Lead_128BPM_01.wav", "One-Shots/Leads");
     assert_eq!(r.sample_type, SampleType::OneShot);
     assert_eq!(r.bpm, Some(128.0));
+    // Tempo + key suggests a loop, but a short file is still a one-shot.
+    let short = AudioMeta { duration_secs: Some(0.9), ..Default::default() };
+    let r = run_with(&classifier(), "P/Lead_128BPM_C.wav", Some(&short));
+    assert_eq!(r.category_path, "One-Shots/Leads", "{:#?}", r.evidence);
 }
 
 #[test]
@@ -459,4 +463,59 @@ fn learned_rules_do_not_override_clear_names_elsewhere() {
 fn expect_with(c: &Classifier, rel: &str, path: &str) {
     let r = run_with(c, rel, None);
     assert_eq!(r.category_path, path, "{rel}\nevidence: {:#?}", r.evidence);
+}
+
+// ---------- melody-kit naming ----------
+
+fn long() -> AudioMeta {
+    AudioMeta { duration_secs: Some(34.0), ..Default::default() }
+}
+
+#[test]
+fn titled_melody_loops_with_key_and_bpm() {
+    for name in [
+        "Kits/Utopia Kit/cashier [133 BPM D minor] @someproducer.wav",
+        "Kits/Utopia Kit/alien 155BPM (g4) [prod. somebody].wav",
+        "Kits/Utopia Kit/goons [140 BPM E minor] @a @b.wav",
+        "Kits/Utopia Kit/motion 140bpm f#min.wav",
+    ] {
+        let r = run_with(&classifier(), name, Some(&long()));
+        assert_eq!(r.category_path, "Melodic Loops/Full Melody Loops", "{name}\n{:#?}", r.evidence);
+        assert!(r.confidence >= 0.6, "{name}: {} {:#?}", r.confidence, r.evidence);
+        assert!(r.key.is_some());
+    }
+}
+
+#[test]
+fn melody_fallback_only_when_nothing_else_matched() {
+    // An instrument word wins as usual.
+    let r = run_with(&classifier(), "Kits/Kit/cold [140 BPM C minor] piano.wav", Some(&long()));
+    assert_eq!(r.category_path, "Melodic Loops/Piano Loops");
+    // No key: no guess.
+    let r = run_with(&classifier(), "Kits/Kit/SINGLE 145 BPM.wav", Some(&long()));
+    assert_eq!(r.category_path, "Uncategorised");
+    // A pitched one-shot with no keyword is not a melody loop.
+    let short = AudioMeta { duration_secs: Some(1.0), ..Default::default() };
+    let r = run_with(&classifier(), "Kits/Kit/glass (c4).wav", Some(&short));
+    assert_ne!(r.category_path, "Melodic Loops/Full Melody Loops");
+}
+
+#[test]
+fn producer_credits_never_match_keywords() {
+    // "snare" in a producer handle must not classify the file.
+    let r = run("Kits/Kit/sunset [prod. snaremaster] @kickboy.wav");
+    assert_eq!(r.category_path, "Uncategorised", "{:#?}", r.evidence);
+}
+
+#[test]
+fn vibes_is_a_mood_not_a_vibraphone() {
+    assert_ne!(run("Kits/Pack/BASSPOP MK1 - BUS VIBES.wav").category_path, "One-Shots/Mallets");
+}
+
+#[test]
+fn melody_fallback_respects_real_folder_hints() {
+    let r = run_with(&classifier(), "Kits/Kit/Vocals/angel [140 BPM C minor].wav", Some(&long()));
+    assert_eq!(r.category_path, "Vocals/Vocal Loops", "{:#?}", r.evidence);
+    let r = run_with(&classifier(), "Melody Kit Vol 2/angel [140 BPM C minor].wav", Some(&long()));
+    assert_eq!(r.category_path, "Melodic Loops/Full Melody Loops", "{:#?}", r.evidence);
 }

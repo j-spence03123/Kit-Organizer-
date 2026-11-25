@@ -12,6 +12,7 @@
 //! | One-shot term in filename (`one shot`, `hit`)| −3.0   |
 //! | One-shot term in folder (decays)             | −2.0   |
 //! | BPM stated in filename                       | +1.5   |
+//! | …and a key stated too                        | +1.0   |
 //! | WAV ACID chunk: loop with tempo              | +2.0   |
 //! | WAV ACID chunk: one-shot flag                | −2.0   |
 //! | WAV sampler loop points (`smpl`)             | +0.5   |
@@ -45,6 +46,8 @@ pub struct LoopInput<'a> {
     /// (tokens, distance from file: 1 = parent, is_import_root)
     pub folders: &'a [(Vec<String>, usize, bool)],
     pub bpm_in_name: bool,
+    /// A musical key is stated in the name or tags.
+    pub key_known: bool,
     pub note_octave: bool,
     pub audio: Option<&'a AudioMeta>,
 }
@@ -117,6 +120,10 @@ pub fn detect(cfg: &CompiledConfig, input: &LoopInput) -> LoopDecision {
     }
     if input.bpm_in_name {
         add(1.5, "BPM stated in filename".into(), &mut ev);
+        if input.key_known {
+            // One-shots are tuned to a note but almost never tagged with a tempo.
+            add(1.0, "Both tempo and key are stated".into(), &mut ev);
+        }
     }
     if input.note_octave {
         add(-0.5, "Note with octave in filename".into(), &mut ev);

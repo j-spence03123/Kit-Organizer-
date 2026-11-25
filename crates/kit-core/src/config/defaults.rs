@@ -210,7 +210,7 @@ fn tree() -> Vec<B> {
             ]),
             c("Synths", &["synth", "synths", "syn", "synthesizer", "synthesiser"]).loop_to("Melodic Loops/Synth Loops"),
             c("Bells", &["bell", "bells", "chime", "chimes", "glockenspiel", "glock", "celesta", "music box"]).loop_to("Melodic Loops/Bell Loops"),
-            c("Mallets", &["mallet", "mallets", "marimba", "xylophone", "vibraphone", "vibes", "kalimba"]).loop_to("Melodic Loops/Mallet Loops"),
+            c("Mallets", &["mallet", "mallets", "marimba", "xylophone", "vibraphone", "kalimba"]).loop_to("Melodic Loops/Mallet Loops"),
             c("Strings", &["string", "strings", "violin", "violins", "viola", "cello", "cellos", "pizzicato", "pizz", "str"]).loop_to("Melodic Loops/String Loops"),
             c("Brass", &["brass", "trumpet", "trumpets", "trombone", "horn", "horns", "tuba", "french horn"]).loop_to("Melodic Loops/Brass Loops"),
             c("Woodwinds", &["woodwind", "woodwinds", "flute", "flutes", "clarinet", "oboe", "bassoon", "sax", "saxophone", "pan flute", "recorder"]).loop_to("Melodic Loops/Woodwind Loops"),
