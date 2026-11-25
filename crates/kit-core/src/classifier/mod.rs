@@ -108,6 +108,9 @@ pub enum Origin {
     Learned,
     /// Signal analysis of the audio.
     Audio,
+    /// A naming pattern in the file itself (e.g. a loop with a key but no
+    /// instrument named).
+    Pattern,
     /// Reserved for a future ML model.
     Model,
 }
@@ -124,6 +127,7 @@ impl Origin {
             Origin::Learned => 4,
             Origin::Audio => 5,
             Origin::Model => 6,
+            Origin::Pattern => 7,
         }
     }
     fn method_name(&self) -> &'static str {
@@ -135,6 +139,7 @@ impl Origin {
             Origin::Learned => "learned",
             Origin::Audio => "audio",
             Origin::Model => "model",
+            Origin::Pattern => "pattern",
         }
     }
 }
@@ -191,7 +196,9 @@ pub fn match_phrases(cfg: &CompiledConfig, tokens: &[String]) -> Vec<PhraseMatch
 }
 
 fn node_factor(cfg: &CompiledConfig, node: usize) -> f32 {
-    if cfg.nodes[node].is_leaf() {
+    // A parent without a default subcategory (Hi-Hats/) is itself where the
+    // file goes, so a match on it is not vague.
+    if cfg.nodes[node].is_leaf() || cfg.nodes[node].default_child.is_none() {
         1.0
     } else {
         cfg.source.weights.parent_factor
@@ -482,7 +489,29 @@ impl Classifier {
             _ => {}
         }
 
-        if let Some(why) = daw_project(input.folders) {
+        // A file named exactly like one of its folders is the pack's demo or
+        // preview ("Dance Explosion Vol.1.mp3" in "… Dance Explosion Vol.1").
+        let stem_toks = fine_tokens(stem);
+        if stem_toks.len() >= 2 && input.folders.iter().any(|f| {
+            let ft = fine_tokens(f);
+            ft == stem_toks || (ft.len() > stem_toks.len() && ft.ends_with(&stem_toks))
+        }) {
+            return Classification {
+                category_id: cfg.nodes[cfg.uncategorised].id.clone(),
+                category_path: cfg.path_of(cfg.uncategorised).to_string(),
+                confidence: 0.0,
+                evidence: vec!["Named after its pack folder — probably the pack's demo or preview".into()],
+                alternatives: vec![],
+                sample_type: SampleType::Loop,
+                loop_score: None,
+                bpm: None,
+                bpm_source: None,
+                key: None,
+                key_source: None,
+                method: "pack-demo".into(),
+            };
+        }
+        if let Some(why) = daw_project_with_name(input.folders, input.file_name) {
             return Classification {
                 category_id: cfg.nodes[cfg.uncategorised].id.clone(),
                 category_path: cfg.path_of(cfg.uncategorised).to_string(),
@@ -591,7 +620,7 @@ impl Classifier {
                         "Loop with a musical key ({}) but no instrument named — typical of melody loops",
                         key.as_deref().unwrap_or("")
                     ),
-                    origin: Origin::Context,
+                    origin: Origin::Pattern,
                     weak: false,
                 });
             }
@@ -607,7 +636,7 @@ impl Classifier {
                     node,
                     points: w.keyless_loop,
                     label: "Loop with no key and no instrument named — usually a drum loop (melodic loops are labelled with a key)".into(),
-                    origin: Origin::Context,
+                    origin: Origin::Pattern,
                     weak: false,
                 });
             }
@@ -705,7 +734,17 @@ impl Classifier {
         let mut ranked: Vec<(usize, f32)> = direct.keys().map(|&n| (n, total_of(n))).collect();
         // Deterministic: score desc, then config order.
         ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal).then(a.0.cmp(&b.0)));
-        let (winner, s1) = ranked[0];
+        let (mut winner, mut s1) = ranked[0];
+        // A subcategory that is also named beats its parent: the evidence
+        // agrees and the subcategory is more specific ("Hi-Hat Open").
+        // Only when the subcategory's own evidence is meaningful, not a trace
+        // from a pack name.
+        while let Some(&(d, ds)) = ranked.iter().find(|&&(n, _)| {
+            n != winner && is_ancestor(&cfg.nodes, winner, n) && direct.get(&n).is_some_and(|x| x.0 >= w.min_score)
+        }) {
+            winner = d;
+            s1 = ds.max(s1);
+        }
         if s1 < w.min_score {
             let mut ev = vec![format!(
                 "Evidence too weak to classify (best: {} at {:.2}, minimum {:.2})",
@@ -819,7 +858,13 @@ impl Classifier {
             factor *= 0.8;
             ev_out.push("Category expects loops but the sample looks like a one-shot (×0.8)".into());
         }
-        let confidence = ((strength * margin * factor).clamp(0.0, 0.99) * 100.0).round() / 100.0;
+        let mut confidence = ((strength * margin * factor).clamp(0.0, 0.99) * 100.0).round() / 100.0;
+        // Sibling context alone can suggest a category, never confirm it.
+        let only_context = chain.iter().filter_map(|n| direct.get(n)).flat_map(|(_, idxs)| idxs.iter()).all(|&i| evidence[i].origin == Origin::Context);
+        if only_context && confidence > SIBLING_ONLY_CAP {
+            confidence = SIBLING_ONLY_CAP;
+            ev_out.push(format!("Only other files in the folder suggest this — capped at {:.0}% so you confirm it", SIBLING_ONLY_CAP * 100.0));
+        }
 
         let mut alternatives = Vec::new();
         for (n, s) in all_competitors.iter().take(4) {
@@ -845,7 +890,7 @@ impl Classifier {
                 }
             }
         }
-        let order = ["folder", "filename", "tags", "siblings", "learned", "audio", "model"];
+        let order = ["folder", "filename", "tags", "pattern", "siblings", "learned", "audio", "model"];
         kinds.sort_by_key(|k| order.iter().position(|o| o == k));
         let method = if kinds.is_empty() { "other".to_string() } else { kinds.join("+") };
 
@@ -887,6 +932,30 @@ impl Classifier {
 /// Samples/{Recorded,Processed,Imported}` (incl. Freeze/Consolidate/Crop),
 /// and FL Studio "Project Files"/"Project Bones" folders.
 pub fn daw_project(folders: &[String]) -> Option<&'static str> {
+    daw_project_with_name(folders, "")
+}
+
+/// Ableton names recordings and renders with a timestamp:
+/// `7-Audio 0025 [2025-01-02 152806].wav`, `Freeze 3-Audio [2026-04-28 145516]-1.wav`.
+fn ableton_timestamp(name: &str) -> bool {
+    let b = name.as_bytes();
+    (0..b.len().saturating_sub(18)).any(|i| {
+        b[i] == b'['
+            && b[i + 1..i + 5].iter().all(u8::is_ascii_digit)
+            && b[i + 5] == b'-'
+            && b[i + 6..i + 8].iter().all(u8::is_ascii_digit)
+            && b[i + 8] == b'-'
+            && b[i + 9..i + 11].iter().all(u8::is_ascii_digit)
+            && b[i + 11] == b' '
+            && b[i + 12..i + 18].iter().all(u8::is_ascii_digit)
+            && b.get(i + 18) == Some(&b']')
+    })
+}
+
+pub fn daw_project_with_name(folders: &[String], file_name: &str) -> Option<&'static str> {
+    if ableton_timestamp(file_name) && folders.iter().any(|f| f.eq_ignore_ascii_case("samples") || f.eq_ignore_ascii_case("freeze") || f.eq_ignore_ascii_case("recorded")) {
+        return Some("Ableton recording/render");
+    }
     let lower: Vec<String> = folders.iter().map(|f| f.to_lowercase()).collect();
     for (i, f) in lower.iter().enumerate() {
         if f.ends_with(" project") || f == "project" {
@@ -905,6 +974,10 @@ pub fn daw_project(folders: &[String]) -> Option<&'static str> {
     }
     None
 }
+
+/// Maximum confidence from sibling context alone (below the default 60%
+/// review threshold).
+pub const SIBLING_ONLY_CAP: f32 = 0.55;
 
 /// Key from the filename, then embedded tags, then the sampler root note.
 /// The root note is ignored when it is 60 (C4), the usual default.

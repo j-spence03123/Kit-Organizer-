@@ -46,6 +46,12 @@ pub fn reason(r: &SampleRow, uncategorised_id: &str) -> &'static str {
     if r.method == "daw-project" || has("Audio from a DAW project") {
         return "Audio from a DAW project, not a sample";
     }
+    if r.method == "pack-demo" {
+        return "Pack demo or preview";
+    }
+    if has("Only other files in the folder suggest this") {
+        return "Only other files in the folder suggest it";
+    }
     if r.category_id == uncategorised_id {
         if has("Evidence too weak") {
             return "Only weak hints (e.g. the pack name)";

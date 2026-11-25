@@ -34,7 +34,8 @@ pub struct CategoryNode {
     /// Keywords/phrases that identify this category. Matching is
     /// token-aware and case/punctuation-insensitive. Prefix an alias with
     /// `~` to mark it as weak evidence (half weight). Single-token aliases of
-    /// two characters or fewer (e.g. `bd`, `sd`) are automatically weak.
+    /// two characters or fewer are automatically weak unless prefixed with
+    /// `!` (`!hh`). Append `@word1|word2` to require context.
     #[serde(default)]
     pub aliases: Vec<String>,
     /// Tie-breaking priority (-5..=5). Each point adds
@@ -361,6 +362,11 @@ impl CompiledConfig {
                     Some(rest) => (true, rest),
                     None => (false, raw.as_str()),
                 };
+                // "!" marks a short abbreviation as deliberate ("!hh"): not auto-weak.
+                let (force_strong, text) = match text.strip_prefix('!') {
+                    Some(rest) => (true, rest),
+                    None => (false, text),
+                };
                 let (text, requires) = match text.split_once('@') {
                     Some((a, req)) => (
                         a,
@@ -372,7 +378,7 @@ impl CompiledConfig {
                 if toks.is_empty() {
                     continue;
                 }
-                let auto_weak = !weak_marked && toks.len() == 1 && toks[0].chars().count() <= 2;
+                let auto_weak = !weak_marked && !force_strong && toks.len() == 1 && toks[0].chars().count() <= 2;
                 let weak = weak_marked || auto_weak;
                 max_phrase = max_phrase.max(toks.len());
                 let hit = AliasHit { node: idx, weak, auto_weak, requires, tokens: toks.len(), alias: text.trim().to_string() };

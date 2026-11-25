@@ -584,3 +584,59 @@ fn rhythmic_bass_heavy_mixes_are_drum_loops_not_kick_loops() {
     let r = run_with(&classifier(), "Kits/V/VFH4 Flying Dutchman Kit/VFH4 128BPM Flying Dutchman Mix.wav", Some(&features(f, 8.0)));
     assert_ne!(r.category_path, "Drum Loops/Kick Loops", "{:#?}", r.evidence);
 }
+
+// ---------- third review-list round ----------
+
+#[test]
+fn standalone_hh_is_a_hi_hat() {
+    let r = expect("Kits/UK Garage Samples Pack/35_11_HH.WAV", "Hi-Hats");
+    assert!(r.confidence >= 0.6, "{} {:#?}", r.confidence, r.evidence);
+    // "OH" stays weak ("Oh Yeah" is a vocal).
+    assert_ne!(run("Kits/Pack/Oh Yeah [VOX].wav").category_path, "Hi-Hats/Open Hats");
+}
+
+#[test]
+fn ableton_timestamped_audio_is_daw_project() {
+    let r = run("Kits/Pack/Project Files/ABLETON/WORLDONFIRE/Samples/17-Audio 0001 [2025-01-30 154403].wav");
+    assert_eq!(r.method, "daw-project");
+    assert_ne!(run("Kits/Pack/Samples/Kick [2025].wav").method, "daw-project");
+}
+
+#[test]
+fn construction_kit_drums_and_mixes() {
+    let long = AudioMeta { duration_secs: Some(15.0), ..Default::default() };
+    let r = run_with(&classifier(), "Kits/V/VDE2 128BPM Magic Kit/VDE2 128BPM Magic Drums 1.wav", Some(&long));
+    assert_eq!(r.category_path, "Drum Loops/Full Loops", "{:#?}", r.evidence);
+    let r = run_with(&classifier(), "Kits/V/VTDS1 Kits/VTDS1 Electro Kit 128BPM 06 - Dance Now Kit - Drum Mix.wav", Some(&long));
+    assert_eq!(r.category_path, "Drum Loops/Full Loops", "{:#?}", r.evidence);
+}
+
+#[test]
+fn more_fx_and_perc_words() {
+    expect("Kits/V/VFX3 Vinyl Start-Stop/VFX3 Vinyl Start-Stop 52.wav", "FX/Other FX");
+    expect("Kits/V/VFX1 Hits & Explode/VFX1 Hits & Explode 24.wav", "FX/Impacts");
+    expect("Kits/V/VAD1 Percussions/VAD1 Clicks 056.wav", "Percussion/Electronic Percussion");
+}
+
+#[test]
+fn pack_demo_tracks_are_not_classified() {
+    let r = run("Kits/Vengeance - Dance Explosion Vol.1/Dance Explosion Vol.1.mp3");
+    assert_eq!(r.method, "pack-demo");
+    assert_ne!(run("Kits/Kicks/Kick 01.wav").method, "pack-demo");
+}
+
+#[test]
+fn siblings_alone_never_confirm() {
+    use crate::pipeline::{classify_batch, BatchItem};
+    let c = classifier();
+    let folders = vec!["Kits".to_string(), "UK Garage Samples Pack".to_string()];
+    let mut names: Vec<String> = (0..8).map(|i| format!("35_{i}_HH.WAV")).collect();
+    names.push("MA1 - Qbass - 1.wav".into());
+    let items: Vec<BatchItem> = names
+        .iter()
+        .map(|n| BatchItem { file_name: n, folders: &folders, kind: crate::filetypes::FileKind::Audio, audio: None, group: "g", fixed: None })
+        .collect();
+    let out = classify_batch(&items, &c);
+    let q = out[8].as_ref().unwrap();
+    assert!(q.confidence <= SIBLING_ONLY_CAP, "{} {:#?}", q.confidence, q.evidence);
+}
