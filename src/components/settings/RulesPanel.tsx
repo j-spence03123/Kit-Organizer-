@@ -20,6 +20,9 @@ const WEIGHTS: [keyof ClassifierWeights, string, string][] = [
   ["learned", "Learned rule", "Points for matching one of your corrections"],
   ["sibling", "Sibling agreement", "Points when other files in the folder agree"],
   ["audio", "Audio analysis factor", "Multiplier for audio evidence (0 = off)"],
+  ["keyLoop", "Keyed loop → melody", "Points when a loop states a key but no instrument"],
+  ["keylessLoop", "Keyless loop → drums", "Points when a loop has no key and no instrument"],
+  ["folderFloor", "Folder decay floor", "Folder evidence never decays below this factor"],
 ];
 
 function terms(list: string[]): string {

@@ -18,10 +18,15 @@ pub fn split_vendor(cfg: &CompiledConfig, stem: &str) -> (Option<String>, String
         let t = &toks[skip];
         let lower = t.to_lowercase();
         let known = cfg.vendor_prefixes.contains(&lower);
-        let caps = (2..=6).contains(&t.chars().count())
-            && t.chars().all(|c| c.is_ascii_uppercase())
-            && !cfg.vocab.contains(&lower)
-            && singular(&lower).is_none_or(|s| !cfg.vocab.contains(&s));
+        // ALL-CAPS code, optionally numbered: "XLNT", "VEE2", "VDUB2", "VTDS3".
+        let letters: String = t.chars().take_while(|c| c.is_ascii_uppercase()).collect();
+        let digits = &t[letters.len()..];
+        let letters_lower = letters.to_lowercase();
+        let caps = (2..=6).contains(&letters.len())
+            && digits.len() <= 2
+            && digits.chars().all(|c| c.is_ascii_digit())
+            && !cfg.vocab.contains(&letters_lower)
+            && singular(&letters_lower).is_none_or(|s| !cfg.vocab.contains(&s));
         if known || caps {
             skip += 1;
         } else {
@@ -40,12 +45,14 @@ fn in_vocab(cfg: &CompiledConfig, t: &str) -> bool {
 
 /// Split run-together words into known keywords: `growlbass` → `growl
 /// bass`, `vocalchop` → `vocal chop`. Only words of 6+ letters that are not
-/// already known are split, into 2–3 known words of 3+ letters each.
+/// already known are split, into 2–3 known words of 3+ letters each. If
+/// that fails, one unknown word is allowed next to a known word of 4+
+/// letters: `houseloops` → `house loops`, `filtachords` → `filta chords`.
 pub fn expand_compounds(cfg: &CompiledConfig, tokens: Vec<String>) -> Vec<String> {
     let mut out = Vec::with_capacity(tokens.len());
     for t in tokens {
         if t.chars().count() >= 6 && t.chars().all(|c| c.is_ascii_alphabetic()) && !in_vocab(cfg, &t) {
-            if let Some(parts) = segment(cfg, &t) {
+            if let Some(parts) = segment(cfg, &t).or_else(|| segment_one_unknown(cfg, &t)) {
                 out.extend(parts);
                 continue;
             }
@@ -84,6 +91,31 @@ fn segment(cfg: &CompiledConfig, t: &str) -> Option<Vec<String>> {
     }
     parts.reverse();
     Some(parts)
+}
+
+fn segment_one_unknown(cfg: &CompiledConfig, t: &str) -> Option<Vec<String>> {
+    if t.len() > 16 {
+        return None;
+    }
+    // Prefer the longest known word, at the end ("houseloops") or start ("kickstart" is not split: needs 4+).
+    let mut best: Option<(usize, Vec<String>)> = None;
+    // The unknown part must be 4+ letters: "outbreak" is not "out" + "break".
+    for i in 4..=t.len().saturating_sub(4) {
+        let (a, b) = (&t[..i], &t[i..]);
+        // "epiano" is a keyword, but in "housepiano" the word is "piano":
+        // skip a match that is just a shorter known word with a letter in front.
+        let shorter_known = b.len() > 4 && in_vocab(cfg, &b[1..]);
+        if in_vocab(cfg, b) && !in_vocab(cfg, a) && !shorter_known && best.as_ref().is_none_or(|(l, _)| b.len() > *l) {
+            best = Some((b.len(), vec![a.to_string(), b.to_string()]));
+        }
+    }
+    for i in 4..=t.len().saturating_sub(4) {
+        let (a, b) = (&t[..i], &t[i..]);
+        if in_vocab(cfg, a) && !in_vocab(cfg, b) && a.len() >= 5 && best.as_ref().is_none_or(|(l, _)| a.len() > *l) {
+            best = Some((a.len(), vec![a.to_string(), b.to_string()]));
+        }
+    }
+    best.map(|(_, v)| v)
 }
 
 /// Optimal-string-alignment edit distance (adjacent swaps count as one).
@@ -171,10 +203,13 @@ pub fn match_tokens(cfg: &CompiledConfig, tokens: &[String], context: &HashSet<S
             }
             for k in keys {
                 if let Some(hits) = cfg.aliases.get(&k) {
+                    // "Loop 808" is file number 808, "808 Long" is an 808:
+                    // a number at the very end of a name only counts as weak.
+                    let index_like = n == 1 && i + 1 == tokens.len() && i > 0 && w[0].chars().all(|c| c.is_ascii_digit());
                     let hits: Vec<_> = hits
                         .iter()
                         .filter(|h| requirement_met(&h.requires, context))
-                        .map(|h| (h.node, h.weak, h.tokens, h.auto_weak))
+                        .map(|h| (h.node, h.weak || index_like, h.tokens, h.auto_weak))
                         .collect();
                     if hits.is_empty() {
                         continue;
@@ -293,6 +328,21 @@ mod tests {
         assert_eq!(v("hihat"), ["hihat"], "known compounds are kept");
         assert_eq!(v("closedhat"), ["closedhat"]);
         assert_eq!(v("whatever"), ["whatever"]);
+    }
+
+    #[test]
+    fn numbered_vendor_codes_and_partial_compounds() {
+        let c = cfg();
+        assert_eq!(split_vendor(&c, "VEE2 Electro Loop 001"), (Some("vee2".into()), "Electro_Loop_001".into()));
+        assert_eq!(split_vendor(&c, "VDUB2 ML 4 140 Bpm").1, "4_140_Bpm");
+        assert_eq!(split_vendor(&c, "TR808 Kick").0, None, "three digits is a model number");
+        let v = |s: &str| expand_compounds(&c, fine_tokens(s));
+        assert_eq!(v("Houseloops"), ["house", "loops"]);
+        assert_eq!(v("Housepiano"), ["house", "piano"]);
+        assert_eq!(v("Filtachords"), ["filta", "chords"]);
+        assert_eq!(v("monsterunderyourbed"), ["monsterunderyourbed"]);
+        assert_eq!(v("Outbreak"), ["outbreak"]);
+        assert_eq!(v("Organity"), ["organity"]);
     }
 
     #[test]

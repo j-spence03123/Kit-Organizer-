@@ -103,6 +103,10 @@ pub fn singular(tok: &str) -> Option<String> {
     if tok.len() > 2 && tok.ends_with('s') && !tok.ends_with("ss") {
         return Some(tok[..tok.len() - 1].to_string());
     }
+    // Slang plurals: "snarez", "kickz", "hatz".
+    if tok.len() > 3 && tok.ends_with('z') && !tok.ends_with("zz") {
+        return Some(tok[..tok.len() - 1].to_string());
+    }
     None
 }
 

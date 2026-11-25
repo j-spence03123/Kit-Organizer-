@@ -49,7 +49,7 @@ export const config: CategoryConfig = {
   weights: {
     filename: 3, phraseBonus: 0.5, folderNear: 2, folderDecay: 0.75, rootFolderFactor: 0.4, parentFactor: 0.6,
     weakFactor: 0.5, ancestorSupport: 0.5, headNounBonus: 0.3, priorityStep: 0.25, saturation: 2, loopThreshold: 2,
-    minScore: 0.75, metadata: 1.5, fuzzyFactor: 0.6, learned: 4, sibling: 2.5, audio: 1,
+    minScore: 0.75, metadata: 1.5, fuzzyFactor: 0.6, learned: 4, sibling: 2.5, audio: 1, keyLoop: 2.5, keylessLoop: 1.4, folderFloor: 0.75,
   },
   genericFolderTerms: ["samples"],
   loopTerms: ["loop"],

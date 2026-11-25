@@ -249,7 +249,7 @@ impl EvidenceSource for FolderSource {
             if toks.is_empty() || cfg.generic_folders.contains(&toks.join(" ")) {
                 continue;
             }
-            let mut factor = w.folder_decay.powi(*dist as i32 - 1);
+            let mut factor = w.folder_decay.powi(*dist as i32 - 1).max(w.folder_floor.min(1.0));
             if *root {
                 factor *= w.root_folder_factor;
             }
@@ -561,6 +561,22 @@ impl Classifier {
                         "Loop with a musical key ({}) but no instrument named — typical of melody loops",
                         key.as_deref().unwrap_or("")
                     ),
+                    origin: Origin::Context,
+                    weak: false,
+                });
+            }
+        }
+        // The keyless counterpart: an explicit loop ("Electro Loop 069")
+        // with no key and no instrument. Vendors almost always label melodic
+        // loops with a key, so these are usually drum loops. Deliberately
+        // weak — it gives a best guess you can accept per group.
+        let explicit_loop = lp.evidence.iter().any(|e| e.contains("loop term") || e.contains("indicates loops"));
+        if lp.is_loop && explicit_loop && key.is_none() && strongest < w.min_score {
+            if let Some(&node) = cfg.by_id.get("drum-loops") {
+                evidence.push(Evidence {
+                    node,
+                    points: w.keyless_loop,
+                    label: "Loop with no key and no instrument named — usually a drum loop (melodic loops are labelled with a key)".into(),
                     origin: Origin::Context,
                     weak: false,
                 });

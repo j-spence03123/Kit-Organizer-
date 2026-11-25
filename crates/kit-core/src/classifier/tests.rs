@@ -519,3 +519,26 @@ fn melody_fallback_respects_real_folder_hints() {
     let r = run_with(&classifier(), "Melody Kit Vol 2/angel [140 BPM C minor].wav", Some(&long()));
     assert_eq!(r.category_path, "Melodic Loops/Full Melody Loops", "{:#?}", r.evidence);
 }
+
+#[test]
+fn trailing_numbers_are_file_numbers() {
+    // Loop number 303/808 is not an acid line or an 808.
+    assert_ne!(run("P/VEE Electro Loop 303.wav").category_path, "Melodic Loops/Synth Loops");
+    let r = run("P/Loop 808.wav");
+    assert!(r.confidence < 0.6, "{:#?}", r.evidence);
+    expect("P/808 Long C.wav", "Bass/808s");
+}
+
+#[test]
+fn flat_folders_do_not_spread_their_majority() {
+    use crate::pipeline::{classify_batch, BatchItem};
+    let c = classifier();
+    let folders = vec!["Pack".to_string()];
+    let names = ["SL_kick 01.wav", "SL_kick 02.wav", "SL_snare 01.wav", "SL_hat 01.wav", "SL_fx 01.wav", "SL_build 01.wav", "SL_thing 02.wav"];
+    let items: Vec<BatchItem> = names
+        .iter()
+        .map(|n| BatchItem { file_name: n, folders: &folders, kind: crate::filetypes::FileKind::Audio, audio: None, group: "g", fixed: None })
+        .collect();
+    let out = classify_batch(&items, &c);
+    assert_ne!(out[5].as_ref().unwrap().category_path, "Kicks");
+}

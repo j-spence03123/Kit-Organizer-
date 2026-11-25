@@ -148,7 +148,9 @@ pub fn classify_batch(items: &[BatchItem], classifier: &Classifier) -> Vec<Optio
         }
         let Some(((id, path), n)) = counts.into_iter().max_by(|a, b| a.1.cmp(&b.1).then_with(|| b.0.cmp(&a.0))) else { continue };
         let share = n as f32 / confident.max(1) as f32;
-        if n < 2 || share < 0.6 {
+        // Flat pack folders mix everything; only treat a folder as a
+        // consistent group when the category is also 40%+ of all its files.
+        if n < 2 || share < 0.6 || (n as f32) < 0.4 * idxs.len() as f32 {
             continue;
         }
         let points = classifier.config().source.weights.sibling * share;

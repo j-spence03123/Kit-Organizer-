@@ -71,6 +71,9 @@ export interface ClassifierWeights {
   learned: number;
   sibling: number;
   audio: number;
+  keyLoop: number;
+  keylessLoop: number;
+  folderFloor: number;
 }
 
 export interface CategoryConfig {

@@ -113,6 +113,22 @@ pub struct ClassifierWeights {
     /// Loops (only when nothing else matched).
     #[serde(default = "d_key_loop")]
     pub key_loop: f32,
+    /// Points for "loop, no key, no instrument named" → Drum Loops (only
+    /// when nothing else matched). Vendors label melodic loops with a key,
+    /// so keyless generic loops are usually drum loops.
+    #[serde(default = "d_keyless_loop")]
+    pub keyless_loop: f32,
+    /// Folder evidence never decays below this factor (a "Vocal Essentials"
+    /// pack folder describes everything inside it, however deep).
+    #[serde(default = "d_folder_floor")]
+    pub folder_floor: f32,
+}
+
+fn d_keyless_loop() -> f32 {
+    1.4
+}
+fn d_folder_floor() -> f32 {
+    0.75
 }
 
 fn d_key_loop() -> f32 {
@@ -161,6 +177,8 @@ impl Default for ClassifierWeights {
             sibling: d_sibling(),
             audio: d_audio(),
             key_loop: d_key_loop(),
+            keyless_loop: d_keyless_loop(),
+            folder_floor: d_folder_floor(),
         }
     }
 }

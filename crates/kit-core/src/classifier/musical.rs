@@ -30,6 +30,10 @@ fn parse_note(s: &str) -> Option<(String, &str)> {
     let mut chars = s.char_indices();
     let (_, first) = chars.next()?;
     let letter = first.to_ascii_uppercase();
+    // German notation: H is B (common in packs from German vendors).
+    if letter == 'H' && s.len() == 1 && first == 'H' {
+        return Some(("B".into(), ""));
+    }
     if !('A'..='G').contains(&letter) {
         return None;
     }
@@ -93,7 +97,7 @@ pub fn key_from_name(stem: &str) -> Option<String> {
     let toks: Vec<String> = coarse_tokens(stem);
     // Explicit "key" marker: "Key_Am", "key of F".
     for (i, t) in toks.iter().enumerate() {
-        if t.eq_ignore_ascii_case("key") {
+        if t.eq_ignore_ascii_case("key") || t.eq_ignore_ascii_case("root") {
             let mut j = i + 1;
             if toks.get(j).is_some_and(|x| x.eq_ignore_ascii_case("of")) {
                 j += 1;
@@ -139,7 +143,7 @@ pub fn key_from_name(stem: &str) -> Option<String> {
         if i > 0 && near_end {
             let chars: Vec<char> = t.chars().collect();
             let bare = match chars.as_slice() {
-                [c] => c.is_ascii_uppercase(),
+                [c] => c.is_ascii_uppercase() && (*c != 'H' || toks.iter().any(|x| x.eq_ignore_ascii_case("sounds") || x.chars().all(|d| d.is_ascii_digit()))),
                 [c, '#'] | [c, '♯'] => c.is_ascii_uppercase(),
                 [c, 'b'] => c.is_ascii_uppercase() && *c != 'B',
                 _ => false,
@@ -225,6 +229,14 @@ mod tests {
         assert_eq!(key_from_name("Kick_01"), None);
         assert_eq!(key_from_name("Big Room Drop"), None);
         assert_eq!(key_from_name("A Kick 01"), None);
+    }
+
+    #[test]
+    fn root_marker_and_german_h() {
+        assert_eq!(key_from_name("VEC3 Special Sounds 050 Root B 140 BPM").as_deref(), Some("B"));
+        assert_eq!(key_from_name("VEC3 Special Sounds 066 Root G# 142 BPM").as_deref(), Some("G#"));
+        assert_eq!(key_from_name("VEC1 Sounds 031 H").as_deref(), Some("B"));
+        assert_eq!(key_from_name("VEC1 Sounds 120 G#").as_deref(), Some("G#"));
     }
 
     #[test]
