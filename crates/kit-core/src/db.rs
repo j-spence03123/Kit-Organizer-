@@ -338,6 +338,25 @@ impl Database {
         Ok(Self { conn })
     }
 
+    // ---------- meta ----------
+
+    pub fn meta(&self, key: &str) -> CoreResult<Option<String>> {
+        Ok(self.conn.query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0)).optional()?)
+    }
+
+    pub fn set_meta(&self, key: &str, value: &str) -> CoreResult<()> {
+        self.conn.execute(
+            "INSERT INTO meta(key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![key, value],
+        )?;
+        Ok(())
+    }
+
+    /// Has the user (or a bundle) ever saved a category configuration?
+    pub fn has_saved_categories(&self) -> CoreResult<bool> {
+        Ok(self.get_setting("categories")?.is_some())
+    }
+
     // ---------- settings & config ----------
 
     fn get_setting(&self, key: &str) -> CoreResult<Option<String>> {

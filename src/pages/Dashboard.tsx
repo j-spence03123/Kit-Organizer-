@@ -79,7 +79,7 @@ export default function Dashboard() {
               </Panel>
               <Panel title="How classification works">
                 <div className="grid gap-2 p-4 text-xs text-muted">
-                  <p>Kit Organizer reads folder names, filenames and audio metadata (duration, ACID loop/tempo tags). It does not listen to the audio itself.</p>
+                  <p>Kit Organizer reads folder names, filenames, embedded tags and simple audio measurements (length, low end, rhythm), and learns from your decisions. It does not recognise sounds the way a person does.</p>
                   <p className="flex gap-2">
                     <AlertCircle size={13} className="mt-px shrink-0 text-accent" />
                     Confidence reflects how strong and consistent the rule evidence is, not a statistical probability.

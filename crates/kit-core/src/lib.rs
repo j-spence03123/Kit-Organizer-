@@ -22,5 +22,6 @@ pub mod organiser;
 pub mod pipeline;
 pub mod review;
 pub mod scanner;
+pub mod starter;
 
 pub use error::{CoreError, CoreResult};

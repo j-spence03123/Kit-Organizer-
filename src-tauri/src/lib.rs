@@ -11,17 +11,31 @@ use state::AppState;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
+/// Training bundled at build time (`starter/kit-organizer-config.json`), or "null".
+const STARTER: &str = include_str!(concat!(env!("OUT_DIR"), "/starter.json"));
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .register_asynchronous_uri_scheme_protocol("kitaudio", protocol::handle)
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
-            let db = Database::open(&dir.join("kit-organizer.db"))?;
+            let mut db = Database::open(&dir.join("kit-organizer.db"))?;
+            let mut startup_messages = Vec::new();
+            match kit_core::starter::apply(&mut db, STARTER) {
+                Ok(Some(r)) if r.rules > 0 || r.categories_applied => startup_messages.push(format!(
+                    "Loaded built-in training: {} learned rule(s){}.",
+                    r.rules,
+                    if r.categories_applied { " and categories" } else { "" }
+                )),
+                Ok(_) => {}
+                Err(e) => startup_messages.push(format!("Built-in training could not be loaded: {e}")),
+            }
             let db = Arc::new(Mutex::new(db));
             // Reconcile anything interrupted by a crash or power loss before
             // the UI can start new work.
-            let recovery = kit_core::organiser::recover(&db).unwrap_or_else(|e| vec![format!("Recovery check failed: {e}")]);
+            let mut recovery = kit_core::organiser::recover(&db).unwrap_or_else(|e| vec![format!("Recovery check failed: {e}")]);
+            recovery.extend(startup_messages);
             let state = AppState::new(db, recovery)?;
             app.manage(state);
             Ok(())

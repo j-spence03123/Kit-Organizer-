@@ -135,6 +135,16 @@ cargo run -p kit-core --example benchmark -- my-library.txt --db "%APPDATA%/app.
 
 None of the tests need commercial sample packs. Filesystem tests generate their files in temporary directories, and the audio tests synthesise WAVs.
 
+### Shipping your training with a build
+
+Your learned rules live in your own database, not in the app. To include them in an installer you send to someone:
+
+1. In the app: **Settings → Export settings, categories & learned rules**.
+2. Save the file as `starter/kit-organizer-config.json`.
+3. Run `npm run tauri build`. The log says *Bundling learned rules from starter/kit-organizer-config.json*.
+
+On first launch, that build loads all your learned rules, plus your categories if the person has never saved their own. Your personal settings (output folder, review budget, …) are not copied. A newer build with more training merges the new rules on its first launch. The file is git-ignored because it contains file names from your library. See `starter/README.md`.
+
 ### Command-line dry run
 
 To see what the classifier would do with a folder, without changing anything:
