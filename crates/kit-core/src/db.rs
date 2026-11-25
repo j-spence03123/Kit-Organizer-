@@ -128,6 +128,10 @@ pub struct SampleQuery {
     pub needs_review_below: Option<f32>,
     pub duplicates_only: bool,
     pub source_pack: Option<String>,
+    /// Exact folder chain (as stored in `relative_dir`).
+    pub relative_dir: Option<String>,
+    /// Exact category id.
+    pub category_id: Option<String>,
     pub sort: Option<String>,
     pub descending: bool,
     pub offset: u32,
@@ -494,7 +498,9 @@ impl Database {
         Ok(rows)
     }
 
-    pub fn query_samples(&self, q: &SampleQuery) -> CoreResult<SamplePage> {
+    /// WHERE clause and bound values for a query (shared by paging and
+    /// bulk operations so they always select exactly the same rows).
+    fn filter_sql(q: &SampleQuery) -> (String, Vec<rusqlite::types::Value>) {
         use rusqlite::types::Value as V;
         let mut where_ = vec!["1=1".to_string()];
         let mut args: Vec<V> = Vec::new();
@@ -536,7 +542,17 @@ impl Database {
         if let Some(p) = q.source_pack.as_ref().filter(|p| !p.is_empty()) {
             where_.push(format!("source_pack = {}", bind(V::Text(p.clone()))));
         }
-        let w = where_.join(" AND ");
+        if let Some(d) = &q.relative_dir {
+            where_.push(format!("relative_dir = {}", bind(V::Text(d.clone()))));
+        }
+        if let Some(c) = &q.category_id {
+            where_.push(format!("category_id = {}", bind(V::Text(c.clone()))));
+        }
+        (where_.join(" AND "), args)
+    }
+
+    pub fn query_samples(&self, q: &SampleQuery) -> CoreResult<SamplePage> {
+        let (w, args) = Self::filter_sql(q);
         let total: i64 =
             self.conn.query_row(&format!("SELECT COUNT(*) FROM samples WHERE {w}"), params_from_iter(args.iter()), |r| r.get(0))?;
         let order = sort_column(q.sort.as_deref().unwrap_or(""));
@@ -549,6 +565,14 @@ impl Database {
         let mut st = self.conn.prepare(&sql)?;
         let rows = st.query_map(params_from_iter(args.iter()), sample_from_row)?.collect::<Result<Vec<_>, _>>()?;
         Ok(SamplePage { rows, total: total as u64 })
+    }
+
+    /// Every row matching a query (no paging) — for bulk actions.
+    pub fn matching_samples(&self, q: &SampleQuery) -> CoreResult<Vec<SampleRow>> {
+        let (w, args) = Self::filter_sql(q);
+        let mut st = self.conn.prepare(&format!("SELECT {SAMPLE_COLS} FROM samples WHERE {w} ORDER BY original_path"))?;
+        let rows = st.query_map(params_from_iter(args.iter()), sample_from_row)?.collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
     }
 
     fn id_list(ids: &[String]) -> (String, Vec<rusqlite::types::Value>) {
@@ -824,6 +848,26 @@ impl Database {
                category_id = excluded.category_id, example = excluded.example, updated_at = excluded.updated_at",
             params![p.kind.as_str(), p.tokens.join(" "), p.scope.clone().unwrap_or_default(), category_id, example, ts],
         )?;
+        Ok(())
+    }
+
+    /// Upsert many corrections in one transaction.
+    pub fn upsert_learned_many(&mut self, items: &[(crate::classifier::learned::Pattern, String, String)]) -> CoreResult<()> {
+        let tx = self.conn.transaction()?;
+        {
+            let mut st = tx.prepare(
+                "INSERT INTO learned_rules(kind, tokens, scope, category_id, example, hits, created_at, updated_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6) \
+                 ON CONFLICT(kind, tokens, scope) DO UPDATE SET \
+                   hits = CASE WHEN learned_rules.category_id = excluded.category_id THEN learned_rules.hits + 1 ELSE 1 END, \
+                   category_id = excluded.category_id, example = excluded.example, updated_at = excluded.updated_at",
+            )?;
+            let ts = now();
+            for (p, cat, example) in items {
+                st.execute(params![p.kind.as_str(), p.tokens.join(" "), p.scope.clone().unwrap_or_default(), cat, example, ts])?;
+            }
+        }
+        tx.commit()?;
         Ok(())
     }
 

@@ -11,6 +11,8 @@ import type {
   SampleRow,
   ScanProgress,
   SimilarSamples,
+  BulkResult,
+  ReviewOverview,
   Settings,
 } from "../types";
 
@@ -135,6 +137,26 @@ export function createBackend() {
       samples = samples.map((s) => (ids.includes(s.id) ? { ...s, categoryId, categoryPath: categoryId === "kicks" ? "Kicks" : categoryId, manualOverride: true, reviewed: true } : s));
       return ids.length;
     },
+    reviewOverview: async (): Promise<ReviewOverview> => ({
+      total: 47,
+      uncategorised: 1,
+      nearThreshold: 30,
+      low: 16,
+      reasons: [["No recognisable keywords", 20], ["Only a broad category matched", 27]],
+      groups: [
+        { folder: "XLNT/Drums", categoryId: "snares", categoryPath: "Snares", count: 12, avgConfidence: 0.52, examples: ["Snr_01.wav"], reason: "Weak single keyword" },
+        { folder: "XLNT", categoryId: "uncategorised", categoryPath: "Uncategorised", count: 1, avgConfidence: 0, examples: ["Mystery_01.wav"], reason: "No recognisable keywords" },
+      ],
+    }),
+    acceptMatching: async (query: unknown): Promise<BulkResult> => {
+      log("acceptMatching", query);
+      return { changed: 12, resolvedAutomatically: 30, remaining: 5 };
+    },
+    reassignMatching: async (query: unknown, categoryId: string): Promise<BulkResult> => {
+      log("reassignMatching", query, categoryId);
+      return { changed: 1, resolvedAutomatically: 0, remaining: 46 };
+    },
+    exportReviewList: async () => 47,
     similarSamples: async (ids: string[]): Promise<SimilarSamples | null> => {
       log("similarSamples", ids);
       return null;

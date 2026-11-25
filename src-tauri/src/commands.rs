@@ -16,7 +16,7 @@ use kit_core::error::CoreError;
 use kit_core::models::*;
 use kit_core::organiser::{self, ExecReport, Plan, PlanOptions, PlanSummary, PlannedAction, PlannedOp, UndoReport};
 use kit_core::scanner::{scan, ScanOptions, ScanProgress};
-use kit_core::{pipeline, CoreResult};
+use kit_core::{pipeline, review, CoreResult};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -399,7 +399,118 @@ pub fn clear_learned_rules(state: State<AppState>) -> CmdResult<()> {
 
 #[tauri::command]
 pub fn mark_reviewed(state: State<AppState>, ids: Vec<String>, reviewed: bool) -> CmdResult<usize> {
-    state.db().mark_reviewed(&ids, reviewed).map_err(err)
+    let n = state.db().mark_reviewed(&ids, reviewed).map_err(err)?;
+    if reviewed && state.db().settings().map_err(err)?.learn_from_corrections {
+        let mut rows = Vec::new();
+        for id in &ids {
+            if let Some(r) = state.db().get_sample(id).map_err(err)? {
+                rows.push(r);
+            }
+        }
+        learn(&state, &rows, None).map_err(err)?;
+    }
+    Ok(n)
+}
+
+/// Record confirmed decisions as learned rules and rebuild the classifier.
+fn learn(state: &AppState, rows: &[SampleRow], category: Option<&str>) -> CoreResult<bool> {
+    let c = state.classifier();
+    let items = review::patterns_for(c.config(), rows, category);
+    if items.is_empty() {
+        return Ok(false);
+    }
+    state.db().upsert_learned_many(&items)?;
+    state.rebuild_classifier()?;
+    Ok(true)
+}
+
+#[tauri::command]
+pub async fn review_overview(app: AppHandle, import_id: String) -> CmdResult<review::ReviewOverview> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let t = state.db().settings().map_err(err)?.confidence_threshold;
+        let rows = review::pending_review(&state.db(), &import_id, t).map_err(err)?;
+        let c = state.classifier();
+        let unc = c.config().nodes[c.config().uncategorised].id.clone();
+        Ok(review::overview(&rows, t, &unc, 300))
+    })
+    .await
+    .map_err(err)?
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkResult {
+    /// Files you decided on.
+    changed: usize,
+    /// Other files that no longer need review after re-classifying with
+    /// what was just learned.
+    resolved_automatically: usize,
+    /// Files still needing review in this import.
+    remaining: usize,
+}
+
+/// Apply a decision to every pending file matching `query`, learn from it,
+/// then re-classify the rest of the import so similar files follow.
+fn bulk(state: &AppState, query: SampleQuery, category: Option<String>) -> CoreResult<BulkResult> {
+    let import_id = query.import_id.clone().ok_or_else(|| CoreError::Other("an import is required".into()))?;
+    let settings = state.db().settings()?;
+    let t = settings.confidence_threshold;
+    let before = review::needs_review_count(&state.db(), &import_id, t)?;
+    let rows: Vec<SampleRow> =
+        state.db().matching_samples(&query)?.into_iter().filter(|r| r.status == SampleStatus::Pending).collect();
+    let ids: Vec<String> = rows.iter().map(|r| r.id.clone()).collect();
+    match &category {
+        Some(cat) => {
+            let c = state.classifier();
+            let idx = c.config().by_id.get(cat).ok_or_else(|| CoreError::Other("unknown category".into()))?;
+            let path = c.config().path_of(*idx).to_string();
+            state.db().reassign(&ids, cat, &path)?;
+        }
+        None => {
+            state.db().mark_reviewed(&ids, true)?;
+        }
+    }
+    let after_decision = review::needs_review_count(&state.db(), &import_id, t)?;
+    let remaining = if settings.learn_from_corrections && learn(state, &rows, category.as_deref())? {
+        let classifier = state.classifier();
+        let mut db = state.db();
+        review::reclassify_import(&mut db, &classifier, &import_id, t)?
+    } else {
+        after_decision
+    };
+    Ok(BulkResult {
+        changed: ids.len(),
+        resolved_automatically: after_decision.saturating_sub(remaining),
+        remaining: remaining.min(before),
+    })
+}
+
+#[tauri::command]
+pub async fn accept_matching(app: AppHandle, query: SampleQuery) -> CmdResult<BulkResult> {
+    tauri::async_runtime::spawn_blocking(move || bulk(&app.state::<AppState>(), query, None).map_err(err)).await.map_err(err)?
+}
+
+#[tauri::command]
+pub async fn reassign_matching(app: AppHandle, query: SampleQuery, category_id: String) -> CmdResult<BulkResult> {
+    tauri::async_runtime::spawn_blocking(move || bulk(&app.state::<AppState>(), query, Some(category_id)).map_err(err))
+        .await
+        .map_err(err)?
+}
+
+/// Write the review list (names only) in benchmark format.
+#[tauri::command]
+pub fn export_review_list(state: State<AppState>, import_id: String, path: String) -> CmdResult<usize> {
+    let p = PathBuf::from(&path);
+    if !p.is_absolute() {
+        return Err("path must be absolute".into());
+    }
+    let t = state.db().settings().map_err(err)?.confidence_threshold;
+    let rows = review::pending_review(&state.db(), &import_id, t).map_err(err)?;
+    let c = state.classifier();
+    let text = review::export_lines(&rows, &c.config().nodes[c.config().uncategorised].id);
+    std::fs::write(&p, text).map_err(|e| format!("could not write {}: {e}", p.display()))?;
+    Ok(rows.len())
 }
 
 #[tauri::command]

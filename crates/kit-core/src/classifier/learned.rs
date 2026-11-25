@@ -92,11 +92,29 @@ pub fn pattern_of(cfg: &CompiledConfig, file_name: &str, folders: &[String]) -> 
 
 pub struct LearnedSource {
     rules: Vec<LearnedRule>,
+    /// Name rules indexed by their first (sorted) word: a rule can only
+    /// match a file containing that word, so lookups stay fast with
+    /// thousands of rules.
+    by_first: std::collections::HashMap<String, Vec<usize>>,
+    /// Folder rules indexed by their joined words.
+    by_folder: std::collections::HashMap<String, Vec<usize>>,
 }
 
 impl LearnedSource {
     pub fn new(rules: Vec<LearnedRule>) -> Self {
-        Self { rules }
+        let mut by_first: std::collections::HashMap<String, Vec<usize>> = Default::default();
+        let mut by_folder: std::collections::HashMap<String, Vec<usize>> = Default::default();
+        for (i, r) in rules.iter().enumerate() {
+            match r.kind {
+                RuleKind::Name => {
+                    if let Some(t) = r.tokens.first() {
+                        by_first.entry(t.clone()).or_default().push(i);
+                    }
+                }
+                RuleKind::Folder => by_folder.entry(r.tokens.join(" ")).or_default().push(i),
+            }
+        }
+        Self { rules, by_first, by_folder }
     }
 }
 
@@ -112,7 +130,16 @@ impl EvidenceSource for LearnedSource {
         let have: HashSet<&String> = pat.tokens.iter().collect();
         let w = cfg.source.weights.learned;
         let mut out = Vec::new();
-        for r in self.rules.iter().filter(|r| r.kind == pat.kind) {
+        let candidates: Vec<usize> = match pat.kind {
+            RuleKind::Name => {
+                let mut c: Vec<usize> = pat.tokens.iter().filter_map(|t| self.by_first.get(t)).flatten().copied().collect();
+                c.sort_unstable();
+                c.dedup();
+                c
+            }
+            RuleKind::Folder => self.by_folder.get(&pat.tokens.join(" ")).cloned().unwrap_or_default(),
+        };
+        for r in candidates.into_iter().map(|i| &self.rules[i]) {
             let Some(&node) = cfg.by_id.get(&r.category_id) else { continue };
             let exact = r.tokens.len() == pat.tokens.len() && r.tokens.iter().all(|t| have.contains(t));
             let subset = !exact && r.tokens.iter().all(|t| have.contains(t));

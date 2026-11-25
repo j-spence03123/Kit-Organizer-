@@ -16,6 +16,10 @@ export async function pickSavePath(defaultPath: string): Promise<string | null> 
   return save({ defaultPath, filters: [{ name: "JSON", extensions: ["json"] }] });
 }
 
+export async function pickTextSavePath(defaultPath: string): Promise<string | null> {
+  return save({ defaultPath, filters: [{ name: "Text", extensions: ["txt"] }] });
+}
+
 export async function confirmDialog(message: string, title: string, okLabel = "Continue"): Promise<boolean> {
   return ask(message, { title, kind: "warning", okLabel, cancelLabel: "Cancel" });
 }

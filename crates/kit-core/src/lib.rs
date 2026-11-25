@@ -20,6 +20,7 @@ pub mod hashing;
 pub mod models;
 pub mod organiser;
 pub mod pipeline;
+pub mod review;
 pub mod scanner;
 
 pub use error::{CoreError, CoreResult};

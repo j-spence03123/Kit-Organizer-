@@ -54,8 +54,12 @@ describe("primary workflow", () => {
 
     // Filter to uncertain samples, inspect and reassign one
     await user.click(screen.getByRole("tab", { name: /needs review/i }));
-    await waitFor(() => expect(within(table).queryByText("Kick_01.wav")).not.toBeInTheDocument());
-    await user.click(within(table).getByText("Mystery_01.wav"));
+    // Needs review opens grouped; switch to the file list.
+    await screen.findByRole("list", { name: /review groups/i });
+    await user.click(screen.getByRole("radio", { name: /files/i }));
+    const reviewTable = await screen.findByRole("table", { name: /samples/i });
+    await waitFor(() => expect(within(reviewTable).queryByText("Kick_01.wav")).not.toBeInTheDocument());
+    await user.click(within(reviewTable).getByText("Mystery_01.wav"));
     const details = screen.getByRole("complementary", { name: /sample details/i });
     expect(within(details).getByText(/Evidence/)).toBeInTheDocument();
     await user.click(within(details).getByRole("button", { name: /change category/i }));
@@ -127,5 +131,28 @@ describe("primary workflow", () => {
     const calls = backend.current!.calls.filter((c) => c.name === "reassignSamples");
     expect(calls.at(-1)?.args).toEqual([["s1", "s2"], "kicks"]);
     await waitFor(() => expect(screen.queryByRole("status", { name: /similar files/i })).not.toBeInTheDocument());
+  });
+
+  it("reviews in groups and applies decisions to whole groups", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(within(await screen.findByRole("navigation", { name: "Main" })).getByRole("button", { name: /import samples/i }));
+    pickQueue.push(["/packs/XLNT"], ["/out"]);
+    await user.click(screen.getByRole("button", { name: /browse folders/i }));
+    await user.click(screen.getByRole("button", { name: /^choose$/i }));
+    await user.click(screen.getByRole("button", { name: /scan 1 folder/i }));
+    await screen.findByRole("table", { name: /samples/i });
+
+    await user.click(screen.getByRole("tab", { name: /needs review/i }));
+    const groups = await screen.findByRole("list", { name: /review groups/i });
+    expect(screen.getByText("No recognisable keywords")).toBeInTheDocument();
+    const row = within(groups).getByText("XLNT/Drums").closest("li")!;
+    await user.click(within(row as HTMLElement).getByRole("button", { name: /^accept$/i }));
+    const call = backend.current!.calls.find((c) => c.name === "acceptMatching");
+    expect(call?.args[0]).toMatchObject({ importId: "imp1", relativeDir: "XLNT/Drums", categoryId: "snares" });
+    expect(await screen.findByText(/Accepted 12 file\(s\)\. 30 similar file\(s\) were resolved automatically\. 5 left to review\./)).toBeInTheDocument();
+
+    await user.click(within(row as HTMLElement).getByRole("button", { name: /files/i }));
+    expect(await screen.findByRole("button", { name: /clear folder filter/i })).toBeInTheDocument();
   });
 });

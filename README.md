@@ -153,6 +153,8 @@ This prints confidence, sample type and proposed destination for every file. Add
    - Use *Needs review* to see uncertain files. Click a row to hear it and see the evidence behind the classification.
    - Select several rows (Ctrl/⌘-click or Shift-click) to reassign, accept or set the source pack in bulk.
    - *Duplicates* lists files whose content already exists elsewhere. Choose *Skip* or *Keep both*.
+   - **Large libraries:** *Needs review* opens in **Groups** view. Uncertain files are grouped by folder and prediction, with the reason they're uncertain (no keywords, only the pack name, conflicting keywords, …). Accept or move a whole group in one click; *Accept all close calls* approves every prediction just under the threshold. Each decision is learned, and the rest of the import is re-classified straight away, so similar files drop out of the queue. In the file list, select a page and click *Select all N matching* to act on every file that matches the current filters.
+   - **Export list for tuning** saves the review queue (file names only, no audio) in benchmark format. Correct it and run the benchmark on it, or share it to get the rules tuned for your library.
 3. **Organise Samples.** The plan shows how many files will be copied or moved, the total size against free space, which files will be renamed, rerouted or skipped, and sample destinations. Nothing touches the disk until you confirm. Move mode needs an extra confirmation checkbox.
 4. **Done.** The completion screen shows counts and any problems. Open the **Library** to browse the result, or undo the import from the completion screen or from **History**.
 

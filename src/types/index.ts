@@ -185,6 +185,8 @@ export interface SampleQuery {
   needsReviewBelow?: number | null;
   duplicatesOnly?: boolean;
   sourcePack?: string | null;
+  relativeDir?: string | null;
+  categoryId?: string | null;
   sort?: string | null;
   descending?: boolean;
   offset?: number;
@@ -377,6 +379,31 @@ export interface SimilarSamples {
   description: string;
   categoryId: string;
   categoryPath: string;
+}
+
+export interface ReviewGroup {
+  folder: string;
+  categoryId: string;
+  categoryPath: string;
+  count: number;
+  avgConfidence: number;
+  examples: string[];
+  reason: string;
+}
+
+export interface ReviewOverview {
+  total: number;
+  uncategorised: number;
+  nearThreshold: number;
+  low: number;
+  reasons: [string, number][];
+  groups: ReviewGroup[];
+}
+
+export interface BulkResult {
+  changed: number;
+  resolvedAutomatically: number;
+  remaining: number;
 }
 
 export interface CategoryRemap {

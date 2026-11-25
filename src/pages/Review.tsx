@@ -2,6 +2,7 @@ import { Check, CopyCheck, CopyX, FolderInput, ListChecks, Package, RefreshCw, S
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CategoryPicker } from "../components/classification/CategoryPicker";
 import { OrganiseDialog } from "../components/classification/OrganiseDialog";
+import { ReviewGroups } from "../components/classification/ReviewGroups";
 import { SampleDetail } from "../components/classification/SampleDetail";
 import { Pager, SampleTable } from "../components/classification/SampleTable";
 import { PageHeader } from "../components/layout/PageHeader";
@@ -10,7 +11,7 @@ import { useApp } from "../hooks/useApp";
 import { usePlayer } from "../hooks/useAudioPlayer";
 import { useDebounced, useSampleQuery } from "../hooks/useSampleQuery";
 import { api, errorMessage } from "../services/api";
-import type { ImportRecord, ImportSummary, SampleQuery, SampleRow, SimilarSamples } from "../types";
+import type { BulkResult, ImportRecord, ImportSummary, ReviewGroup, SampleQuery, SampleRow, SimilarSamples } from "../types";
 import { basename, cx, formatDate, formatNumber } from "../utils/format";
 
 const PAGE = 200;
@@ -36,6 +37,9 @@ export default function Review() {
   const [packDialog, setPackDialog] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [similar, setSimilar] = useState<SimilarSamples | null>(null);
+  const [view, setView] = useState<"groups" | "files">("groups");
+  const [folderFilter, setFolderFilter] = useState<ReviewGroup | null>(null);
+  const [allMatching, setAllMatching] = useState(false);
   const debounced = useDebounced(search);
   const player = usePlayer();
   // Optional "play on select" preference.
@@ -63,7 +67,8 @@ export default function Review() {
     if (activeImportId) api.importSummary(activeImportId).then(setSummary).catch(() => undefined);
   }, [activeImportId, version]);
 
-  useEffect(() => setOffset(0), [debounced, filter, category, sort, descending]);
+  useEffect(() => setOffset(0), [debounced, filter, category, sort, descending, folderFilter]);
+  useEffect(() => setAllMatching(false), [debounced, filter, category, folderFilter, activeImportId]);
 
   const query: SampleQuery | null = useMemo(
     () =>
@@ -75,13 +80,15 @@ export default function Review() {
             needsReviewBelow: filter === "review" ? threshold : null,
             duplicatesOnly: filter === "duplicates",
             minConfidence: filter === "high" ? 0.8 : null,
+            relativeDir: folderFilter?.folder ?? null,
+            categoryId: folderFilter?.categoryId ?? null,
             sort,
             descending,
             offset,
             limit: PAGE,
           }
         : null,
-    [activeImportId, debounced, category, filter, threshold, sort, descending, offset],
+    [activeImportId, debounced, category, filter, threshold, sort, descending, offset, folderFilter],
   );
   const { page, loading } = useSampleQuery(query, version);
   const rows = filter === "manual" ? page.rows.filter((r) => r.manualOverride) : page.rows;
@@ -110,6 +117,26 @@ export default function Review() {
   };
 
   const ids = [...selected];
+  // Bulk actions over every file matching the current filters (not just this page).
+  const matchingQuery = (): SampleQuery => ({ ...query, offset: 0, limit: 0 });
+  const bulkReport = (verb: string, r: BulkResult) => {
+    const auto = r.resolvedAutomatically > 0 ? ` ${formatNumber(r.resolvedAutomatically)} similar file(s) resolved automatically.` : "";
+    toast(`${verb} ${formatNumber(r.changed)} file(s).${auto} ${formatNumber(r.remaining)} left to review.`, "ok");
+  };
+  const runBulk = async (fn: () => Promise<BulkResult>, verb: string) => {
+    setBusy(true);
+    try {
+      bulkReport(verb, await fn());
+      setSelected(new Set());
+      setAllMatching(false);
+      refresh();
+      bumpData();
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
   const catName = (id: string) => categories.find((c) => c.id === id)?.path ?? id;
   const reassign = async (list: string[], id: string) => {
     await run(() => api.reassignSamples(list, id), `Moved ${list.length} sample(s) to ${catName(id)}`);
@@ -179,6 +206,8 @@ export default function Review() {
   }
 
   const editable = ["review", "cancelled", "interrupted", "completed", "partially-undone"].includes(imp.status) && (summary?.pending ?? 0) > 0;
+  const showGroups = filter === "review" && view === "groups" && !folderFilter;
+  const pageAllSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
   const filters: [Filter, string, number | undefined][] = [
     ["all", "All", summary?.total],
     ["review", "Needs review", summary?.needsReview],
@@ -224,7 +253,7 @@ export default function Review() {
         </div>
         <div className="flex rounded-md border border-line-strong bg-panel-2 p-0.5" role="tablist" aria-label="Filter">
           {filters.map(([k, l, n]) => (
-            <button key={k} type="button" role="tab" aria-selected={filter === k} onClick={() => setFilter(k)} className={cx("rounded px-2.5 py-1 text-xs", filter === k ? "bg-raised text-fg" : "text-muted hover:text-fg")}>
+            <button key={k} type="button" role="tab" aria-selected={filter === k} onClick={() => { setFilter(k); setFolderFilter(null); if (k === "review") setView("groups"); }} className={cx("rounded px-2.5 py-1 text-xs", filter === k ? "bg-raised text-fg" : "text-muted hover:text-fg")}>
               {l}
               {n != null && <span className={cx("tabular ml-1.5", k === "review" && n > 0 ? "text-warn" : "text-faint")}>{formatNumber(n)}</span>}
             </button>
@@ -239,25 +268,59 @@ export default function Review() {
             </option>
           ))}
         </select>
-        <div className="ml-auto">
-          <Pager offset={offset} limit={PAGE} total={page.total} onChange={setOffset} />
-        </div>
+        {filter === "review" && !folderFilter && (
+          <div className="flex rounded-md border border-line-strong bg-panel-2 p-0.5" role="radiogroup" aria-label="Review view">
+            {(["groups", "files"] as const).map((v) => (
+              <button key={v} type="button" role="radio" aria-checked={view === v} onClick={() => setView(v)} className={cx("rounded px-2.5 py-1 text-xs capitalize", view === v ? "bg-raised text-fg" : "text-muted hover:text-fg")}>
+                {v}
+              </button>
+            ))}
+          </div>
+        )}
+        {folderFilter && (
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent-soft px-2 py-1 text-xs">
+            <span className="max-w-72 truncate" title={folderFilter.folder}>{folderFilter.folder}</span>
+            <span className="text-faint">→ {folderFilter.categoryPath}</span>
+            <button type="button" aria-label="Clear folder filter" className="text-faint hover:text-fg" onClick={() => { setFolderFilter(null); setView("groups"); }}>
+              <X size={12} />
+            </button>
+          </span>
+        )}
+        {!showGroups && (
+          <div className="ml-auto">
+            <Pager offset={offset} limit={PAGE} total={page.total} onChange={setOffset} />
+          </div>
+        )}
       </div>
 
       {selected.size > 0 && (
         <div className="flex items-center gap-2 border-b border-line bg-accent-soft px-6 py-2" role="toolbar" aria-label="Bulk actions">
-          <span className="text-xs font-medium">{selected.size} selected</span>
-          <CategoryPicker onSelect={(id) => void reassign(ids, id)} disabled={!editable || busy} label="Reassign to…" />
-          <Button size="sm" icon={<Check size={13} />} disabled={!editable || busy} onClick={() => void accept(ids)}>
+          <span className="text-xs font-medium">{allMatching ? `All ${formatNumber(page.total)} matching selected` : `${selected.size} selected`}</span>
+          {pageAllSelected && page.total > rows.length && !allMatching && (
+            <button type="button" className="text-xs text-accent underline-offset-2 hover:underline" onClick={() => setAllMatching(true)}>
+              Select all {formatNumber(page.total)} matching
+            </button>
+          )}
+          <CategoryPicker
+            onSelect={(id) => void (allMatching ? runBulk(() => api.reassignMatching(matchingQuery(), id), "Moved") : reassign(ids, id))}
+            disabled={!editable || busy}
+            label="Reassign to…"
+          />
+          <Button
+            size="sm"
+            icon={<Check size={13} />}
+            disabled={!editable || busy}
+            onClick={() => void (allMatching ? runBulk(() => api.acceptMatching(matchingQuery()), "Accepted") : accept(ids))}
+          >
             Accept predictions
           </Button>
-          <Button size="sm" icon={<CopyX size={13} />} disabled={!editable || busy} onClick={() => void dup(ids, "skip")}>
+          <Button size="sm" icon={<CopyX size={13} />} disabled={!editable || busy || allMatching} onClick={() => void dup(ids, "skip")}>
             Skip duplicates
           </Button>
-          <Button size="sm" icon={<CopyCheck size={13} />} disabled={!editable || busy} onClick={() => void dup(ids, "keep")}>
+          <Button size="sm" icon={<CopyCheck size={13} />} disabled={!editable || busy || allMatching} onClick={() => void dup(ids, "keep")}>
             Keep duplicates
           </Button>
-          <Button size="sm" icon={<Package size={13} />} disabled={busy} onClick={() => setPackDialog(focused?.sourcePack ?? "")}>
+          <Button size="sm" icon={<Package size={13} />} disabled={busy || allMatching} onClick={() => setPackDialog(focused?.sourcePack ?? "")}>
             Set source pack
           </Button>
           <IconButton label="Clear selection" onClick={() => setSelected(new Set())} className="ml-auto">
@@ -281,6 +344,24 @@ export default function Review() {
         </div>
       )}
 
+      {showGroups ? (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <ReviewGroups
+            importId={imp.id}
+            threshold={threshold}
+            editable={editable}
+            version={version}
+            onShowFiles={(g) => {
+              setFolderFilter(g);
+              setView("files");
+            }}
+            onChanged={() => {
+              refresh();
+              bumpData();
+            }}
+          />
+        </div>
+      ) : (
       <div className="flex min-h-0 flex-1">
         <div className={cx("min-w-0 flex-1 overflow-auto", loading && "opacity-70")}>
           <SampleTable
@@ -326,6 +407,7 @@ export default function Review() {
           )}
         </aside>
       </div>
+      )}
 
       {organiseOpen && (
         <OrganiseDialog
