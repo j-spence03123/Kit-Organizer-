@@ -70,6 +70,41 @@ fn main() {
     for (f, (n, ex)) in lv.iter().take(30) { println!("{n:5} [{f}] e.g. {ex}"); }
     println!("CONFIDENT NEW GROUPS");
     for ((f, c), (n, ex)) in &cg { println!("{n:5} {c:<32} [{f}] e.g. {ex}"); }
+    // Review budget simulation (50 files, accept guesses >= 35%).
+    let now = kit_core::db::now();
+    let rows: Vec<kit_core::models::SampleRow> = cases
+        .iter()
+        .zip(&res)
+        .enumerate()
+        .map(|(i, (case, r))| {
+            let r = r.as_ref().unwrap();
+            let (dir, name) = case.path.rsplit_once('/').unwrap_or(("", &case.path));
+            kit_core::models::SampleRow {
+                id: format!("s{i}"), import_id: "imp".into(), original_path: case.path.clone(), original_filename: name.into(),
+                original_dir: dir.into(), relative_dir: dir.into(), source_pack: String::new(), size: 0, hash: None,
+                file_kind: FileKind::Audio, category_id: r.category_id.clone(), category_path: r.category_path.clone(),
+                confidence: r.confidence, evidence: vec![], alternatives: vec![], sample_type: r.sample_type, bpm: None,
+                bpm_source: None, key: None, key_source: None, method: r.method.clone(), subfolder: r.subfolder.clone(),
+                auto_resolved: false, review_group: None, review_group_size: None, audio: None, manual_override: false,
+                reviewed: false, status: kit_core::models::SampleStatus::Pending, duplicate_of: None, duplicate_path: None,
+                dup_decision: None, destination_path: None, error: None, created_at: now.clone(), updated_at: now.clone(),
+            }
+        })
+        .collect();
+    let needs = rows.iter().filter(|r| r.confidence < 0.6).count();
+    let (ups, ar) = kit_core::review::auto_resolve(&rows, c.config(), 0.6, 0.35, 50, false);
+    let left = ups.iter().filter(|u| !u.reviewed).count();
+    println!(
+        "BUDGET: {needs} below threshold -> {left} to review ({} representatives deciding for {} files); {} guesses accepted; {} kept in Uncategorised with folders",
+        ar.representatives, ar.covered_by_representatives, ar.accepted, ar.uncategorised
+    );
+    let mut acc: BTreeMap<String, usize> = BTreeMap::new();
+    for u in ups.iter().filter(|u| u.reviewed && u.category_path != "Uncategorised") {
+        *acc.entry(u.category_path.clone()).or_default() += 1;
+    }
+    let mut av: Vec<_> = acc.into_iter().collect();
+    av.sort_by_key(|g| std::cmp::Reverse(g.1));
+    println!("ACCEPTED GUESSES BY CATEGORY: {}", av.iter().take(15).map(|(k, n)| format!("{k} {n}")).collect::<Vec<_>>().join(", "));
     println!("files {}: uncategorised before {before_unc} → after {unc}; now above 60%: {conf}", cases.len());
     let mut v: Vec<_> = cats.into_iter().collect();
     v.sort_by_key(|g| std::cmp::Reverse(g.1 .0));

@@ -425,3 +425,18 @@ fn unsafe_kit_folder_names_are_sanitised() {
     assert_eq!(plan::safe_segment(".."), "");
     assert_eq!(plan::safe_segment("Name. "), "Name");
 }
+
+#[test]
+fn manual_decisions_clear_the_auto_flag() {
+    let e = env();
+    let id = import(&e, DuplicateHandling::Skip);
+    let mut db = e.db.lock().unwrap();
+    let rows = db.samples_for_import(&id).unwrap();
+    let cfg = crate::config::CompiledConfig::compile(&default_config()).unwrap();
+    let (ups, _) = crate::review::auto_resolve(&rows, &cfg, 0.99, 0.35, 1, false);
+    db.apply_auto(&ups).unwrap();
+    let auto: Vec<String> = db.samples_for_import(&id).unwrap().into_iter().filter(|r| r.auto_resolved).map(|r| r.id).collect();
+    assert!(!auto.is_empty());
+    db.reassign(&auto, "kicks", "Kicks").unwrap();
+    assert!(db.samples_for_import(&id).unwrap().iter().all(|r| !r.auto_resolved));
+}

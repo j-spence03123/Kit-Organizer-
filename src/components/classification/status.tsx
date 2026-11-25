@@ -17,5 +17,12 @@ export function sampleState(r: SampleRow, threshold: number) {
 
 export function StatusBadge({ row, threshold }: { row: SampleRow; threshold: number }) {
   const s = sampleState(row, threshold);
-  return <Badge tone={s.tone}>{s.label}</Badge>;
+  if (row.autoResolved && row.status === "pending") return <Badge tone="neutral">Auto</Badge>;
+  const decides = !row.reviewed && !row.manualOverride && (row.reviewGroupSize ?? 0) > 1;
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Badge tone={s.tone}>{s.label}</Badge>
+      {decides && <Badge tone="accent">×{row.reviewGroupSize}</Badge>}
+    </span>
+  );
 }

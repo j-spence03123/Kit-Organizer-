@@ -120,7 +120,8 @@ pub fn overview_at(rows: &[SampleRow], threshold: f32, uncategorised_id: &str, m
                 folder: folder.to_string(),
                 category_id: cat.to_string(),
                 category_path: items[0].category_path.clone(),
-                count: items.len(),
+                // A representative counts for every file its decision covers.
+                count: items.iter().map(|r| r.review_group_size.map(|n| n as usize).filter(|_| !r.reviewed).unwrap_or(1)).sum(),
                 avg_confidence: items.iter().map(|r| r.confidence).sum::<f32>() / items.len() as f32,
                 examples: items.iter().take(4).map(|r| r.original_filename.clone()).collect(),
                 reason: reason.to_string(),
@@ -230,6 +231,9 @@ mod tests {
             key_source: None,
             method: cl.method,
             subfolder: cl.subfolder,
+            auto_resolved: false,
+            review_group: None,
+            review_group_size: None,
             audio: None,
             manual_override: false,
             reviewed: false,
@@ -314,5 +318,267 @@ mod tests {
         assert_eq!(left, 0);
         let b = db.matching_samples(&SampleQuery { relative_dir: Some("Pack/Batch B".into()), ..Default::default() }).unwrap();
         assert!(b.iter().all(|r| r.category_path == "Kicks" && r.confidence >= 0.6), "{:?}", b[0].evidence);
+    }
+}
+
+// ---------- review budget: automatic resolution ----------
+
+/// One row's new state after automatic resolution.
+#[derive(Debug, Clone)]
+pub struct AutoUpdate {
+    pub id: String,
+    pub category_id: String,
+    pub category_path: String,
+    pub subfolder: Option<String>,
+    pub reviewed: bool,
+    pub auto_resolved: bool,
+    pub review_group: Option<String>,
+    pub review_group_size: Option<u32>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoResult {
+    /// Best guesses accepted automatically.
+    pub accepted: usize,
+    /// Kept in Uncategorised (original folders preserved).
+    pub uncategorised: usize,
+    /// Representatives left for a person to decide.
+    pub representatives: usize,
+    /// Files those representatives decide for (including themselves).
+    pub covered_by_representatives: usize,
+}
+
+/// Uncategorised files keep their original folder structure (minus the
+/// imported root) so they stay browsable by pack.
+pub fn uncategorised_subfolder(relative_dir: &str) -> Option<String> {
+    let parts: Vec<&str> = relative_dir.split('/').filter(|s| !s.is_empty()).collect();
+    match parts.len() {
+        0 => None,
+        1 => Some(parts[0].to_string()),
+        _ => Some(parts[1..].join("/")),
+    }
+}
+
+/// Keep at most `budget` files in the review queue.
+///
+/// Candidates are pending, non-manual files that are either newly
+/// uncertain (below `threshold`, unreviewed) or were resolved
+/// automatically before. They are grouped by folder and prediction.
+/// Existing representatives keep their place; free slots go to the new
+/// groups with the highest impact (`files × (1 − confidence)`), or — with
+/// `promote` — to previously auto-resolved groups as well ("Review more").
+/// Every other candidate is resolved: a guess at or above `floor` is
+/// accepted; anything weaker goes to Uncategorised with its folders kept.
+pub fn auto_resolve(
+    rows: &[SampleRow],
+    cfg: &CompiledConfig,
+    threshold: f32,
+    floor: f32,
+    budget: usize,
+    promote: bool,
+) -> (Vec<AutoUpdate>, AutoResult) {
+    let unc = &cfg.nodes[cfg.uncategorised];
+    let candidate = |r: &&SampleRow| {
+        r.status == SampleStatus::Pending
+            && !r.manual_override
+            && (r.auto_resolved || (!r.reviewed && r.confidence < threshold))
+    };
+    let cands: Vec<&SampleRow> = rows.iter().filter(candidate).collect();
+    let is_rep = |r: &SampleRow| !r.auto_resolved && !r.reviewed && r.review_group.is_some() && r.confidence < threshold;
+    let key_of = |r: &SampleRow| format!("{}|{}", r.relative_dir, r.category_id);
+
+    // Groups among candidates.
+    let mut groups: HashMap<String, Vec<&SampleRow>> = HashMap::new();
+    for r in &cands {
+        groups.entry(r.review_group.clone().filter(|_| is_rep(r)).unwrap_or_else(|| key_of(r))).or_default().push(r);
+    }
+    // Existing representatives keep their slots.
+    let mut reps: HashMap<String, String> = HashMap::new(); // group -> rep id
+    for r in cands.iter().filter(|r| is_rep(r)) {
+        if reps.len() < budget {
+            reps.insert(r.review_group.clone().unwrap(), r.id.clone());
+        }
+    }
+    // Fill free slots by impact.
+    let mut ranked: Vec<(&String, f32)> = groups
+        .iter()
+        .filter(|(k, v)| !reps.contains_key(*k) && (promote || v.iter().any(|r| !r.auto_resolved)))
+        .map(|(k, v)| {
+            let conf = v.iter().map(|r| r.confidence).sum::<f32>() / v.len() as f32;
+            (k, v.len() as f32 * (1.0 - conf))
+        })
+        .collect();
+    ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal).then(a.0.cmp(b.0)));
+    for (k, _) in ranked {
+        if reps.len() >= budget {
+            break;
+        }
+        let mut members = groups[k].clone();
+        members.sort_by(|a, b| a.original_filename.cmp(&b.original_filename));
+        reps.insert(k.clone(), members[0].id.clone());
+    }
+
+    let mut out = Vec::with_capacity(cands.len());
+    let mut res = AutoResult { representatives: reps.len(), ..Default::default() };
+    for (k, members) in &groups {
+        let rep = reps.get(k);
+        if rep.is_some() {
+            res.covered_by_representatives += members.len();
+        }
+        for r in members {
+            if Some(&r.id) == rep {
+                out.push(AutoUpdate {
+                    id: r.id.clone(),
+                    category_id: r.category_id.clone(),
+                    category_path: r.category_path.clone(),
+                    subfolder: r.subfolder.clone(),
+                    reviewed: false,
+                    auto_resolved: false,
+                    review_group: Some(k.clone()),
+                    review_group_size: Some(members.len() as u32),
+                });
+                continue;
+            }
+            let group = rep.map(|_| k.clone());
+            if r.confidence >= threshold {
+                // Became confident after re-classifying: no longer automatic.
+                out.push(AutoUpdate {
+                    id: r.id.clone(),
+                    category_id: r.category_id.clone(),
+                    category_path: r.category_path.clone(),
+                    subfolder: r.subfolder.clone(),
+                    reviewed: r.reviewed,
+                    auto_resolved: false,
+                    review_group: None,
+                    review_group_size: None,
+                });
+            } else if r.category_id != unc.id && r.confidence >= floor {
+                res.accepted += 1;
+                out.push(AutoUpdate {
+                    id: r.id.clone(),
+                    category_id: r.category_id.clone(),
+                    category_path: r.category_path.clone(),
+                    subfolder: r.subfolder.clone(),
+                    reviewed: true,
+                    auto_resolved: true,
+                    review_group: group,
+                    review_group_size: None,
+                });
+            } else {
+                res.uncategorised += 1;
+                out.push(AutoUpdate {
+                    id: r.id.clone(),
+                    category_id: unc.id.clone(),
+                    category_path: unc.path.clone(),
+                    subfolder: uncategorised_subfolder(&r.relative_dir),
+                    reviewed: true,
+                    auto_resolved: true,
+                    review_group: group,
+                    review_group_size: None,
+                });
+            }
+        }
+    }
+    (out, res)
+}
+
+/// Run automatic resolution for an import and store the result.
+pub fn auto_resolve_import(
+    db: &mut Database,
+    cfg: &CompiledConfig,
+    import_id: &str,
+    threshold: f32,
+    floor: f32,
+    budget: usize,
+    promote: bool,
+) -> CoreResult<AutoResult> {
+    if budget == 0 {
+        return Ok(AutoResult::default());
+    }
+    let rows = db.samples_for_import(import_id)?;
+    let (updates, res) = auto_resolve(&rows, cfg, threshold, floor, budget, promote);
+    db.apply_auto(&updates)?;
+    Ok(res)
+}
+
+#[cfg(test)]
+mod auto_tests {
+    use super::*;
+    use crate::config::default_config;
+    use crate::db::now;
+    use crate::models::*;
+
+    fn r(id: usize, dir: &str, cat: &str, conf: f32) -> SampleRow {
+        SampleRow {
+            id: format!("s{id}"), import_id: "imp".into(), original_path: format!("/x/{dir}/f{id}.wav"), original_filename: format!("f{id:04}.wav"),
+            original_dir: format!("/x/{dir}"), relative_dir: dir.into(), source_pack: "p".into(), size: 1, hash: None,
+            file_kind: crate::filetypes::FileKind::Audio, category_id: cat.into(), category_path: cat.into(), confidence: conf,
+            evidence: vec![], alternatives: vec![], sample_type: crate::classifier::SampleType::OneShot, bpm: None, bpm_source: None,
+            key: None, key_source: None, method: "x".into(), subfolder: None, auto_resolved: false, review_group: None, review_group_size: None,
+            audio: None, manual_override: false, reviewed: false, status: SampleStatus::Pending, duplicate_of: None, duplicate_path: None,
+            dup_decision: None, destination_path: None, error: None, created_at: now(), updated_at: now(),
+        }
+    }
+
+    #[test]
+    fn budget_caps_the_queue_and_resolves_the_rest_safely() {
+        let cfg = CompiledConfig::compile(&default_config()).unwrap();
+        let mut rows = Vec::new();
+        for g in 0..120 {
+            for i in 0..5 {
+                let (cat, conf) = if g % 2 == 0 { ("fx/other-fx", 0.4) } else { ("uncategorised", 0.0) };
+                rows.push(r(g * 10 + i, &format!("Kits/Pack/Folder {g}"), cat, conf));
+            }
+        }
+        rows.push(r(9999, "Kits/Pack/Sure", "kicks", 0.9));
+        let (ups, res) = auto_resolve(&rows, &cfg, 0.6, 0.35, 50, false);
+        assert_eq!(res.representatives, 50);
+        let left: Vec<_> = ups.iter().filter(|u| !u.reviewed).collect();
+        assert_eq!(left.len(), 50, "queue capped at the budget");
+        // Highest impact first: uncategorised groups (confidence 0) win.
+        assert!(left.iter().all(|u| u.category_id == "uncategorised"));
+        assert!(left.iter().all(|u| u.review_group_size == Some(5)));
+        // Guesses >= floor are accepted; weaker ones go to Uncategorised with folders kept.
+        let acc = ups.iter().find(|u| u.reviewed && u.category_id == "fx/other-fx").unwrap();
+        assert!(acc.auto_resolved);
+        let unc = ups.iter().find(|u| u.reviewed && u.category_id == "uncategorised").unwrap();
+        assert_eq!(unc.subfolder.as_deref().map(|s| s.starts_with("Pack/Folder")), Some(true));
+        // Confident files are untouched.
+        assert!(!ups.iter().any(|u| u.id == "s9999"));
+    }
+
+    #[test]
+    fn existing_representatives_keep_their_place_and_more_can_be_promoted() {
+        let cfg = CompiledConfig::compile(&default_config()).unwrap();
+        let mut rows: Vec<SampleRow> = (0..30).map(|g| r(g, &format!("Kits/P/F{g}"), "uncategorised", 0.0)).collect();
+        let (ups, _) = auto_resolve(&rows, &cfg, 0.6, 0.35, 10, false);
+        for u in &ups {
+            let row = rows.iter_mut().find(|x| x.id == u.id).unwrap();
+            row.reviewed = u.reviewed;
+            row.auto_resolved = u.auto_resolved;
+            row.review_group = u.review_group.clone();
+            row.category_id = u.category_id.clone();
+        }
+        let reps_before: Vec<String> = ups.iter().filter(|u| !u.reviewed).map(|u| u.id.clone()).collect();
+        // Running again changes nothing (idempotent) ...
+        let (again, res) = auto_resolve(&rows, &cfg, 0.6, 0.35, 10, false);
+        let reps_again: Vec<String> = again.iter().filter(|u| !u.reviewed).map(|u| u.id.clone()).collect();
+        assert_eq!(res.representatives, 10);
+        assert_eq!({ let mut a = reps_before.clone(); a.sort(); a }, { let mut b = reps_again; b.sort(); b });
+        // ... and once the user decides them, "Review more" promotes new ones.
+        for id in &reps_before {
+            rows.iter_mut().find(|x| &x.id == id).unwrap().manual_override = true;
+        }
+        let (_, quiet) = auto_resolve(&rows, &cfg, 0.6, 0.35, 10, false);
+        assert_eq!(quiet.representatives, 0, "no new work appears on its own");
+        let (_, more) = auto_resolve(&rows, &cfg, 0.6, 0.35, 10, true);
+        assert_eq!(more.representatives, 10);
+    }
+
+    #[test]
+    fn uncategorised_keeps_original_folders() {
+        assert_eq!(uncategorised_subfolder("Kits/vengeance/VEH1 Cutted Sounds").as_deref(), Some("vengeance/VEH1 Cutted Sounds"));
+        assert_eq!(uncategorised_subfolder("Pack").as_deref(), Some("Pack"));
     }
 }

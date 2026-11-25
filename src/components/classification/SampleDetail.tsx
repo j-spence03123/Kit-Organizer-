@@ -72,6 +72,14 @@ export function SampleDetail({ row, threshold, editable, onReassign, onAccept, o
           <Badge>{row.sampleType}</Badge>
           <Badge>{row.manualOverride ? "manual" : row.method}</Badge>
         </div>
+        {!row.reviewed && !row.manualOverride && (row.reviewGroupSize ?? 0) > 1 && (
+          <p className="rounded-md border border-accent/30 bg-accent-soft px-2.5 py-1.5 text-xs">
+            Your decision here also applies to <strong>{(row.reviewGroupSize ?? 1) - 1}</strong> similar file(s) in this folder.
+          </p>
+        )}
+        {row.autoResolved && (
+          <p className="text-xs text-faint">Resolved automatically to keep the review queue short. You can still change it.</p>
+        )}
         {editable && (
           <div className="flex flex-wrap gap-2 pt-1">
             <CategoryPicker onSelect={(id) => onReassign([row.id], id)} label="Change category" />

@@ -158,6 +158,8 @@ pub struct ImportSummary {
     pub organised: u64,
     pub skipped: u64,
     pub failed: u64,
+    /// Pending files resolved automatically (review budget).
+    pub auto_resolved: u64,
     pub by_category: Vec<(String, u64)>,
 }
 
@@ -220,7 +222,7 @@ fn from_json<T: for<'de> Deserialize<'de> + Default>(s: Option<String>) -> T {
 
 const SAMPLE_COLS: &str = "id, import_id, original_path, original_filename, original_dir, relative_dir, source_pack, size, hash, \
     file_kind, category_id, category_path, confidence, evidence, alternatives, sample_type, bpm, bpm_source, musical_key, method, \
-    audio, manual_override, reviewed, status, duplicate_of, duplicate_path, dup_decision, destination_path, error, created_at, updated_at, key_source, subfolder";
+    audio, manual_override, reviewed, status, duplicate_of, duplicate_path, dup_decision, destination_path, error, created_at, updated_at, key_source, subfolder, auto_resolved, review_group, review_group_size";
 
 fn sample_from_row(r: &Row) -> rusqlite::Result<SampleRow> {
     let kind: String = r.get(9)?;
@@ -266,6 +268,9 @@ fn sample_from_row(r: &Row) -> rusqlite::Result<SampleRow> {
         updated_at: r.get(30)?,
         key_source: r.get(31)?,
         subfolder: r.get(32)?,
+        auto_resolved: r.get::<_, i64>(33)? != 0,
+        review_group: r.get(34)?,
+        review_group_size: r.get::<_, Option<i64>>(35)?.map(|v| v as u32),
     })
 }
 
@@ -323,6 +328,11 @@ impl Database {
         }
         if !has_col("samples", "subfolder")? {
             conn.execute("ALTER TABLE samples ADD COLUMN subfolder TEXT", [])?;
+        }
+        if !has_col("samples", "auto_resolved")? {
+            conn.execute("ALTER TABLE samples ADD COLUMN auto_resolved INTEGER NOT NULL DEFAULT 0", [])?;
+            conn.execute("ALTER TABLE samples ADD COLUMN review_group TEXT", [])?;
+            conn.execute("ALTER TABLE samples ADD COLUMN review_group_size INTEGER", [])?;
         }
         conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '1')", [])?;
         Ok(Self { conn })
@@ -452,7 +462,7 @@ impl Database {
         let tx = self.conn.transaction()?;
         {
             let mut st = tx.prepare(&format!(
-                "INSERT INTO samples({SAMPLE_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33)"
+                "INSERT INTO samples({SAMPLE_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36)"
             ))?;
             for s in rows {
                 st.execute(params![
@@ -489,6 +499,9 @@ impl Database {
                     s.updated_at,
                     s.key_source,
                     s.subfolder,
+                    s.auto_resolved as i64,
+                    s.review_group,
+                    s.review_group_size.map(|v| v as i64),
                 ])?;
             }
         }
@@ -607,7 +620,7 @@ impl Database {
             // after their own folder; moving them anywhere else clears it.
             let into_kits = category_id == crate::classifier::KITS_ID;
             let mut st = tx.prepare(
-                "UPDATE samples SET category_id = ?1, category_path = ?2, manual_override = 1, reviewed = 1, updated_at = ?3, \
+                "UPDATE samples SET category_id = ?1, category_path = ?2, manual_override = 1, reviewed = 1, auto_resolved = 0, updated_at = ?3, \
                  subfolder = CASE WHEN ?5 THEN \
                    CASE WHEN instr(relative_dir, '/') > 0 THEN replace(relative_dir, rtrim(relative_dir, replace(relative_dir, '/', '')), '') ELSE relative_dir END \
                  ELSE NULL END \
@@ -776,6 +789,7 @@ impl Database {
             organised: count("status = 'organised' AND ?2 = ?2")?,
             skipped: count("status = 'skipped' AND ?2 = ?2")?,
             failed: count("status = 'failed' AND ?2 = ?2")?,
+            auto_resolved: count("status = 'pending' AND auto_resolved = 1 AND ?2 = ?2")?,
             by_category,
         })
     }
@@ -857,6 +871,63 @@ impl Database {
         }
         tx.commit()?;
         Ok(())
+    }
+
+    // ---------- automatic resolution (review budget) ----------
+
+    /// Store the outcome of automatic resolution for many samples at once.
+    pub fn apply_auto(&mut self, updates: &[crate::review::AutoUpdate]) -> CoreResult<()> {
+        let tx = self.conn.transaction()?;
+        {
+            let mut st = tx.prepare(
+                "UPDATE samples SET category_id = ?2, category_path = ?3, subfolder = ?4, reviewed = ?5, auto_resolved = ?6, \
+                 review_group = ?7, review_group_size = ?8, updated_at = ?9 WHERE id = ?1 AND status = 'pending' AND manual_override = 0",
+            )?;
+            let ts = now();
+            for u in updates {
+                st.execute(params![
+                    u.id,
+                    u.category_id,
+                    u.category_path,
+                    u.subfolder,
+                    u.reviewed as i64,
+                    u.auto_resolved as i64,
+                    u.review_group,
+                    u.review_group_size.map(|v| v as i64),
+                    ts
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Undo automatic resolution for an import (the caller re-classifies to
+    /// restore predictions). Returns how many rows were reset.
+    pub fn clear_auto(&self, import_id: &str) -> CoreResult<usize> {
+        Ok(self.conn.execute(
+            "UPDATE samples SET reviewed = 0, auto_resolved = 0, review_group = NULL, review_group_size = NULL, \
+               subfolder = CASE WHEN category_id = 'construction-kits' THEN subfolder ELSE NULL END, updated_at = ?2 \
+             WHERE import_id = ?1 AND status = 'pending' AND manual_override = 0 AND (auto_resolved = 1 OR review_group IS NOT NULL)",
+            params![import_id, now()],
+        )?)
+    }
+
+    pub fn set_subfolder(&self, id: &str, subfolder: Option<&str>) -> CoreResult<()> {
+        self.conn.execute("UPDATE samples SET subfolder = ?2 WHERE id = ?1", params![id, subfolder])?;
+        Ok(())
+    }
+
+    /// Pending, automatically resolved members of the given review groups.
+    pub fn group_members(&self, import_id: &str, groups: &[String]) -> CoreResult<Vec<SampleRow>> {
+        let mut out = Vec::new();
+        let mut st = self.conn.prepare(&format!(
+            "SELECT {SAMPLE_COLS} FROM samples WHERE import_id = ?1 AND review_group = ?2 AND auto_resolved = 1 AND status = 'pending' AND manual_override = 0"
+        ))?;
+        for g in groups {
+            out.extend(st.query_map(params![import_id, g], sample_from_row)?.collect::<Result<Vec<_>, _>>()?);
+        }
+        Ok(out)
     }
 
     // ---------- learned rules ----------

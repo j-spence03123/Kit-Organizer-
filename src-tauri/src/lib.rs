@@ -45,6 +45,8 @@ pub fn run() {
             commands::accept_matching,
             commands::reassign_matching,
             commands::export_review_list,
+            commands::auto_resolve,
+            commands::undo_auto_resolve,
             commands::list_learned_rules,
             commands::delete_learned_rule,
             commands::clear_learned_rules,

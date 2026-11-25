@@ -118,6 +118,37 @@ export default function SettingsPage() {
                   ]}
                 />
               </Field>
+              <Field
+                label="Review budget"
+                hint="Maximum files left for you to review per import (0 = review every uncertain file). The rest are resolved automatically; each file you review decides for its whole group."
+              >
+                <input
+                  type="number"
+                  min={0}
+                  max={10000}
+                  className={cx(inputBase, "w-28")}
+                  value={s.reviewBudget}
+                  onChange={(e) => set("reviewBudget", Math.max(0, Math.min(10000, Number(e.target.value) || 0)))}
+                  aria-label="Review budget"
+                />
+              </Field>
+              <Field
+                label={`Accept best guesses from: ${Math.round(s.autoAcceptFloor * 100)}%`}
+                hint="When resolving automatically, guesses at or above this are accepted; weaker ones go to Uncategorised with their original folders kept."
+              >
+                <input
+                  type="range"
+                  min={0.1}
+                  max={0.6}
+                  step={0.05}
+                  value={s.autoAcceptFloor}
+                  onChange={(e) => setS({ ...s, autoAcceptFloor: Number(e.target.value) })}
+                  onMouseUp={() => void save(s)}
+                  onKeyUp={() => void save(s)}
+                  aria-label="Accept best guesses from"
+                  className="accent-[var(--accent)]"
+                />
+              </Field>
               <Toggle
                 label="Learn from my corrections"
                 description="When you reassign a sample, files with the same naming pattern are classified the same way in future. Manage learned rules on the Categories page."

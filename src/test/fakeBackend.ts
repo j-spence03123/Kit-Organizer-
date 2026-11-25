@@ -29,6 +29,8 @@ export const settings: Settings = {
   preview: { volume: 0.8, autoplay: false, loopPlayback: false },
   appearance: { accent: "amber", compactRows: false },
   workerThreads: 0,
+  reviewBudget: 0,
+  autoAcceptFloor: 0.35,
   analyseAudio: false,
   learnFromCorrections: true,
   skipDawProjects: true,
@@ -65,7 +67,7 @@ function row(id: string, name: string, cat: string, conf: number): SampleRow {
   return {
     id, importId: "imp1", originalPath: `/packs/XLNT/${name}`, originalFilename: name, originalDir: "/packs/XLNT", relativeDir: "XLNT",
     sourcePack: "XLNT", size: 1000, hash: `h-${id}`, fileKind: "audio", categoryId: cat.toLowerCase(), categoryPath: cat, confidence: conf,
-    evidence: [`Filename contains "${name}" → ${cat} (+3.00)`], alternatives: [], sampleType: "one-shot", bpm: null, bpmSource: null, key: null, keySource: null, subfolder: null,
+    evidence: [`Filename contains "${name}" → ${cat} (+3.00)`], alternatives: [], sampleType: "one-shot", bpm: null, bpmSource: null, key: null, keySource: null, subfolder: null, autoResolved: false, reviewGroup: null, reviewGroupSize: null,
     method: "filename", audio: null, manualOverride: false, reviewed: false, status: "pending", duplicateOf: null, duplicatePath: null,
     dupDecision: null, destinationPath: null, error: null, createdAt: "", updatedAt: "",
   };
@@ -131,7 +133,7 @@ export function createBackend() {
       needsReview: samples.filter((s) => s.confidence < 0.6 && !s.reviewed && s.status === "pending").length,
       duplicates: 0, duplicatesUndecided: 0,
       organised: samples.filter((s) => s.status === "organised").length,
-      skipped: 0, failed: 0, byCategory: [],
+      skipped: 0, failed: 0, autoResolved: 0, byCategory: [],
     }),
     reassignSamples: async (ids: string[], categoryId: string) => {
       log("reassignSamples", ids, categoryId);

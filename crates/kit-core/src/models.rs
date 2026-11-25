@@ -105,6 +105,13 @@ pub struct Settings {
     pub appearance: AppearanceSettings,
     /// Worker threads for hashing/probing. `0` = automatic.
     pub worker_threads: usize,
+    /// Maximum number of files left for manual review per import; the rest
+    /// are resolved automatically. `0` = review everything uncertain.
+    pub review_budget: usize,
+    /// When resolving automatically, best guesses at or above this
+    /// confidence are accepted; lower ones go to Uncategorised with their
+    /// original folders kept.
+    pub auto_accept_floor: f32,
     /// Decode a few seconds of each file for signal analysis during scans.
     pub analyse_audio: bool,
     /// Remember manual reassignments and apply them to similar files.
@@ -126,6 +133,8 @@ impl Default for Settings {
             preview: PreviewSettings::default(),
             appearance: AppearanceSettings::default(),
             worker_threads: 0,
+            review_budget: 50,
+            auto_accept_floor: 0.35,
             analyse_audio: true,
             learn_from_corrections: true,
             skip_daw_projects: true,
@@ -205,6 +214,16 @@ pub struct SampleRow {
     /// Extra folders below the category (a construction kit's folder).
     #[serde(default)]
     pub subfolder: Option<String>,
+    /// Resolved automatically (review budget) rather than by a person.
+    #[serde(default)]
+    pub auto_resolved: bool,
+    /// Files sharing a review group follow the decision made on the group's
+    /// representative.
+    #[serde(default)]
+    pub review_group: Option<String>,
+    /// For a representative: how many files its decision applies to.
+    #[serde(default)]
+    pub review_group_size: Option<u32>,
     pub audio: Option<AudioMeta>,
     pub manual_override: bool,
     pub reviewed: bool,

@@ -251,6 +251,10 @@ pub fn start_scan(
             for chunk in rows.chunks(2000) {
                 db.insert_samples(chunk)?;
             }
+            if settings.review_budget > 0 {
+                let c = state.classifier();
+                review::auto_resolve_import(&mut db, c.config(), &job, settings.confidence_threshold, settings.auto_accept_floor, settings.review_budget, false)?;
+            }
             let mut imp = db.get_import(&job)?.ok_or_else(|| CoreError::Other("import vanished".into()))?;
             imp.status = ImportStatus::Review;
             imp.stats = stats.clone();
@@ -310,6 +314,7 @@ pub fn reassign_samples(state: State<AppState>, ids: Vec<String>, category_id: S
     let idx = c.config().by_id.get(&category_id).ok_or("unknown category")?;
     let path = c.config().path_of(*idx).to_string();
     let n = state.db().reassign(&ids, &category_id, &path).map_err(err)?;
+    propagate(&state, &ids, Some(&category_id)).map_err(err)?;
     if state.db().settings().map_err(err)?.learn_from_corrections {
         let mut learned = false;
         for id in &ids {
@@ -407,6 +412,9 @@ pub fn clear_learned_rules(state: State<AppState>) -> CmdResult<()> {
 #[tauri::command]
 pub fn mark_reviewed(state: State<AppState>, ids: Vec<String>, reviewed: bool) -> CmdResult<usize> {
     let n = state.db().mark_reviewed(&ids, reviewed).map_err(err)?;
+    if reviewed {
+        propagate(&state, &ids, None).map_err(err)?;
+    }
     if reviewed && state.db().settings().map_err(err)?.learn_from_corrections {
         let mut rows = Vec::new();
         for id in &ids {
@@ -417,6 +425,77 @@ pub fn mark_reviewed(state: State<AppState>, ids: Vec<String>, reviewed: bool) -
         learn(&state, &rows, None).map_err(err)?;
     }
     Ok(n)
+}
+
+/// Apply a decision made on review-group representatives to the files in
+/// their groups. `category` = None accepts each representative's category.
+fn propagate(state: &AppState, ids: &[String], category: Option<&str>) -> CoreResult<usize> {
+    let c = state.classifier();
+    let unc_id = c.config().nodes[c.config().uncategorised].id.clone();
+    let mut changed = 0;
+    for id in ids {
+        let Some(rep) = state.db().get_sample(id)? else { continue };
+        let cat = category.map(String::from).unwrap_or_else(|| rep.category_id.clone());
+        if cat == unc_id {
+            // Kept in Uncategorised: keep its folders like the automatic ones.
+            state.db().set_subfolder(&rep.id, review::uncategorised_subfolder(&rep.relative_dir).as_deref())?;
+        }
+        let Some(group) = rep.review_group.clone() else { continue };
+        let members = state.db().group_members(&rep.import_id, std::slice::from_ref(&group))?;
+        let member_ids: Vec<String> = members.iter().map(|m| m.id.clone()).collect();
+        if member_ids.is_empty() {
+            continue;
+        }
+        let idx = c.config().by_id.get(&cat).ok_or_else(|| CoreError::Other("unknown category".into()))?;
+        let path = c.config().path_of(*idx).to_string();
+        changed += state.db().reassign(&member_ids, &cat, &path)?;
+        if cat == unc_id {
+            for m in &members {
+                state.db().set_subfolder(&m.id, review::uncategorised_subfolder(&m.relative_dir).as_deref())?;
+            }
+        }
+    }
+    Ok(changed)
+}
+
+/// Re-apply the review budget for an import (no-op when the budget is 0).
+fn keep_within_budget(state: &AppState, import_id: &str, promote: bool) -> CoreResult<review::AutoResult> {
+    let s = state.db().settings()?;
+    let c = state.classifier();
+    let mut db = state.db();
+    review::auto_resolve_import(&mut db, c.config(), import_id, s.confidence_threshold, s.auto_accept_floor, s.review_budget, promote)
+}
+
+/// Resolve the review queue down to the budget now; `promote` brings the
+/// next batch of representatives forward ("Review more").
+#[tauri::command]
+pub async fn auto_resolve(app: AppHandle, import_id: String, promote: bool) -> CmdResult<review::AutoResult> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let s = state.db().settings().map_err(err)?;
+        if s.review_budget == 0 {
+            return Err("Set a review budget in Settings first".to_string());
+        }
+        keep_within_budget(&state, &import_id, promote).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+/// Put every automatically resolved file back into the review queue with
+/// its original prediction.
+#[tauri::command]
+pub async fn undo_auto_resolve(app: AppHandle, import_id: String) -> CmdResult<usize> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        state.db().clear_auto(&import_id).map_err(err)?;
+        let t = state.db().settings().map_err(err)?.confidence_threshold;
+        let classifier = state.classifier();
+        let mut db = state.db();
+        review::reclassify_import(&mut db, &classifier, &import_id, t).map_err(err)
+    })
+    .await
+    .map_err(err)?
 }
 
 /// Record confirmed decisions as learned rules and rebuild the classifier.
@@ -478,16 +557,21 @@ fn bulk(state: &AppState, query: SampleQuery, category: Option<String>) -> CoreR
             state.db().mark_reviewed(&ids, true)?;
         }
     }
+    let followed = propagate(state, &ids, category.as_deref())?;
     let after_decision = review::needs_review_count(&state.db(), &import_id, t)?;
-    let remaining = if settings.learn_from_corrections && learn(state, &rows, category.as_deref())? {
+    let mut remaining = if settings.learn_from_corrections && learn(state, &rows, category.as_deref())? {
         let classifier = state.classifier();
         let mut db = state.db();
         review::reclassify_import(&mut db, &classifier, &import_id, t)?
     } else {
         after_decision
     };
+    if settings.review_budget > 0 {
+        keep_within_budget(state, &import_id, false)?;
+        remaining = review::needs_review_count(&state.db(), &import_id, t)?;
+    }
     Ok(BulkResult {
-        changed: ids.len(),
+        changed: ids.len() + followed,
         resolved_automatically: after_decision.saturating_sub(remaining),
         remaining: remaining.min(before),
     })
@@ -539,6 +623,7 @@ pub async fn reclassify_import(app: AppHandle, import_id: String) -> CmdResult<u
         let rows = state.db().samples_for_import(&import_id).map_err(err)?;
         let updated = pipeline::reclassify(&rows, &state.classifier());
         state.db().update_classification(&updated).map_err(err)?;
+        keep_within_budget(&state, &import_id, false).map_err(err)?;
         Ok(updated.len())
     })
     .await

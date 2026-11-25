@@ -1,5 +1,5 @@
 import { Check, CopyCheck, CopyX, FolderInput, ListChecks, Package, RefreshCw, Search, Sparkles, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CategoryPicker } from "../components/classification/CategoryPicker";
 import { OrganiseDialog } from "../components/classification/OrganiseDialog";
 import { ReviewGroups } from "../components/classification/ReviewGroups";
@@ -20,6 +20,7 @@ type Filter = "all" | "review" | "duplicates" | "high" | "manual";
 export default function Review() {
   const { activeImportId, setActiveImportId, settings, config, categories, toast, navigate, bumpData, dataVersion } = useApp();
   const threshold = settings?.confidenceThreshold ?? 0.6;
+  const budget = settings?.reviewBudget ?? 0;
   const [imp, setImp] = useState<ImportRecord | null>(null);
   const [candidates, setCandidates] = useState<ImportRecord[]>([]);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
@@ -66,6 +67,15 @@ export default function Review() {
   useEffect(() => {
     if (activeImportId) api.importSummary(activeImportId).then(setSummary).catch(() => undefined);
   }, [activeImportId, version]);
+  // Short queues are easiest to work through as a plain list — decided once
+  // when an import opens, so it never overrides a view the user picked.
+  const viewChosenFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (summary && activeImportId && viewChosenFor.current !== activeImportId) {
+      viewChosenFor.current = activeImportId;
+      if (summary.needsReview <= 100) setView("files");
+    }
+  }, [summary, activeImportId]);
 
   useEffect(() => setOffset(0), [debounced, filter, category, sort, descending, folderFilter]);
   useEffect(() => setAllMatching(false), [debounced, filter, category, folderFilter, activeImportId]);
@@ -327,6 +337,35 @@ export default function Review() {
           <IconButton label="Clear selection" onClick={() => setSelected(new Set())} className="ml-auto">
             <X size={14} />
           </IconButton>
+        </div>
+      )}
+
+      {summary && editable && ((summary.autoResolved > 0) || (budget > 0 && summary.needsReview > budget)) && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-line bg-panel-2 px-6 py-2 text-xs" role="status" aria-label="Automatic resolution">
+          <Sparkles size={14} className="shrink-0 text-accent" />
+          {summary.autoResolved > 0 ? (
+            <span className="min-w-0 flex-1">
+              <strong>{formatNumber(summary.autoResolved)}</strong> files were resolved automatically: best guesses of {Math.round((settings?.autoAcceptFloor ?? 0.35) * 100)}%+ were accepted, the rest kept in Uncategorised with their original folders. Each file left to review decides for its whole group (×N).
+            </span>
+          ) : (
+            <span className="min-w-0 flex-1">
+              {formatNumber(summary.needsReview)} files need review. Resolve the rest automatically and keep only the {budget} decisions that matter most?
+            </span>
+          )}
+          {summary.autoResolved > 0 ? (
+            <>
+              <Button size="sm" disabled={busy} onClick={() => run(() => api.autoResolve(imp.id, true), "Brought the next decisions forward")}>
+                Review {budget} more
+              </Button>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => run(() => api.undoAutoResolve(imp.id), "Automatic resolution undone — every uncertain file is back in review")}>
+                Undo auto-resolve
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" variant="primary" disabled={busy} onClick={() => run(() => api.autoResolve(imp.id, false), `Review queue reduced to ${budget}`)}>
+              Reduce to {budget}
+            </Button>
+          )}
         </div>
       )}
 

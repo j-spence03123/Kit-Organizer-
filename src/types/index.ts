@@ -37,6 +37,8 @@ export interface Settings {
   preview: { volume: number; autoplay: boolean; loopPlayback: boolean };
   appearance: { accent: string; compactRows: boolean };
   workerThreads: number;
+  reviewBudget: number;
+  autoAcceptFloor: number;
   analyseAudio: boolean;
   learnFromCorrections: boolean;
   skipDawProjects: boolean;
@@ -169,6 +171,10 @@ export interface SampleRow {
   method: string;
   /** Extra folders below the category (a construction kit's own folder). */
   subfolder: string | null;
+  autoResolved: boolean;
+  reviewGroup: string | null;
+  /** For a representative: how many files its decision applies to. */
+  reviewGroupSize: number | null;
   audio: AudioMeta | null;
   manualOverride: boolean;
   reviewed: boolean;
@@ -244,7 +250,15 @@ export interface ImportSummary {
   organised: number;
   skipped: number;
   failed: number;
+  autoResolved: number;
   byCategory: [string, number][];
+}
+
+export interface AutoResult {
+  accepted: number;
+  uncategorised: number;
+  representatives: number;
+  coveredByRepresentatives: number;
 }
 
 export interface DashboardStats {
