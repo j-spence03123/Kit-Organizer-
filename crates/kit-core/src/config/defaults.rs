@@ -86,7 +86,7 @@ fn build(b: B, prefix: &str) -> CategoryNode {
 }
 
 const BASS_LOOPS: &str = "Bass/Bass Loops";
-const PERC_LOOPS: &str = "Drum Loops/Percussion Loops";
+const PERC_LOOPS: &str = "Percussion/Perc Loops";
 
 #[rustfmt::skip]
 fn tree() -> Vec<B> {
@@ -132,22 +132,21 @@ fn tree() -> Vec<B> {
             c("Reverse Cymbals", &["reverse crash", "reversed crash", "rev crash", "crash reverse", "reverse cymbal", "reversed cymbal", "rev cymbal", "reverse cym", "rev cym", "reverse ride", "reverse splash", "reverse china", "crash rev"]),
             c("Other Cymbals", &["other cymbal", "misc cymbal", "gong", "gongs"]),
         ]),
-        c("Percussion", &["perc", "percs", "percussion", "percussions", "perc hit"]).default_child("Other Percussion").loop_to(PERC_LOOPS).kids(vec![
-            c("Shakers", &["shaker", "shakers", "shkr"]).loop_to(PERC_LOOPS),
-            c("Tambourines", &["tambourine", "tambourines", "tamb", "tambo", "tamborine", "tambourin"]).loop_to(PERC_LOOPS),
-            c("Congas", &["conga", "congas"]).loop_to(PERC_LOOPS),
-            c("Bongos", &["bongo", "bongos"]).loop_to(PERC_LOOPS),
-            c("Cowbells", &["cowbell", "cowbells", "cow bell", "808 cowbell", "~cow"]).loop_to(PERC_LOOPS),
-            c("Woodblocks", &["woodblock", "woodblocks", "wood block", "wood blocks"]).loop_to(PERC_LOOPS),
-            c("Claves", &["clave", "claves"]).loop_to(PERC_LOOPS),
-            c("Maracas", &["maraca", "maracas"]).loop_to(PERC_LOOPS),
-            c("Guiros", &["guiro", "guiros"]).loop_to(PERC_LOOPS),
-            c("Agogos", &["agogo", "agogos"]).loop_to(PERC_LOOPS),
-            c("Timpani", &["timpani", "timpanis", "timp", "kettle drum", "kettledrum"]).loop_to(PERC_LOOPS),
-            c("Hand Drums", &["hand drum", "hand drums", "djembe", "tabla", "darbuka", "cajon", "frame drum", "taiko", "doumbek"]).loop_to(PERC_LOOPS),
-            c("Foley Percussion", &["foley perc", "foley percussion", "foley hit", "foley percs"]).loop_to(PERC_LOOPS),
-            c("Electronic Percussion", &["electronic perc", "electronic percussion", "electro perc", "synth perc", "zap", "zaps", "blip", "blips", "click", "clicks"]).loop_to(PERC_LOOPS),
-            c("Other Percussion", &["triangle", "cabasa", "vibraslap", "other perc", "misc perc"]).loop_to(PERC_LOOPS),
+        // Percussion is deliberately flat: every perc one-shot in Percs, every
+        // perc loop in Perc Loops.
+        c("Percussion", &["percussion", "percussions"]).default_child("Percs").loop_to(PERC_LOOPS).kids(vec![
+            c("Percs", &[
+                "perc", "percs", "perc hit", "perc one shot", "percussion one shot",
+                "shaker", "shakers", "shkr", "tambourine", "tambourines", "tamb", "tambo", "tamborine", "tambourin",
+                "conga", "congas", "bongo", "bongos", "cowbell", "cowbells", "cow bell", "808 cowbell", "~cow",
+                "woodblock", "woodblocks", "wood block", "wood blocks", "clave", "claves", "maraca", "maracas",
+                "guiro", "guiros", "agogo", "agogos", "timpani", "timpanis", "timp", "kettle drum", "kettledrum",
+                "hand drum", "hand drums", "djembe", "tabla", "darbuka", "cajon", "frame drum", "taiko", "doumbek",
+                "foley perc", "foley percussion", "foley hit", "foley percs",
+                "electronic perc", "electronic percussion", "electro perc", "synth perc", "zap", "zaps", "blip", "blips", "click", "clicks",
+                "triangle", "cabasa", "vibraslap", "other perc", "misc perc",
+            ]).loop_to(PERC_LOOPS),
+            c("Perc Loops", &["perc loop", "perc loops", "percussion loop", "percussion loops", "shaker loop", "conga loop", "bongo loop", "tamb loop", "tambourine loop"]).kind(Loop),
         ]),
         c("Toms", &["tom", "toms", "floor tom", "rack tom", "hi tom", "low tom", "mid tom", "tom tom"]).loop_to("Drum Loops/Tom Loops"),
         c("FX", &["fx", "sfx", "efx", "effect", "effects", "fx shot"]).default_child("Other FX").kids(vec![
@@ -174,7 +173,6 @@ fn tree() -> Vec<B> {
             c("Snare Loops", &["snare loop", "snare loops"]),
             c("Clap Loops", &["clap loop", "clap loops"]),
             c("Hi-Hat Loops", &["hat loop", "hat loops", "hats loop", "hihat loop", "hi hat loop", "hh loop", "hihat loops"]),
-            c("Percussion Loops", &["perc loop", "perc loops", "percussion loop", "percussion loops"]),
             c("Cymbal Loops", &["cymbal loop", "cymbal loops", "ride loop", "crash loop"]),
             c("Tom Loops", &["tom loop", "tom loops"]),
             c("Drum Fills", &["fill", "fills", "drum fill", "drum fills", "tom fill", "snare fill", "snare roll", "snare rolls", "roll@snare|drum|tom|drums|fill", "rolls@snare|drum|tom|drums|fill"]),

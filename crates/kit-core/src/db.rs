@@ -175,6 +175,44 @@ pub struct DashboardStats {
 }
 
 #[cfg(test)]
+mod perc_migration_tests {
+    use super::*;
+
+    #[test]
+    fn pending_samples_and_rules_move_to_the_new_percussion_folders() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("k.db");
+        {
+            let db = Database::open(&path).unwrap();
+            db.conn.execute("DELETE FROM meta WHERE key = 'perc_v3'", []).unwrap();
+            db.conn.execute(
+                "INSERT INTO imports(id, created_at, sources, output_dir, library_root, mode, status, stats) VALUES ('i', 'now', '[]', '', '', 'copy', 'review', '{}')",
+                [],
+            ).unwrap();
+            for (id, cat, status) in [("a", "percussion/shakers", "pending"), ("b", "drum-loops/percussion-loops", "pending"), ("c", "percussion/congas", "organised")] {
+                db.conn.execute(
+                    "INSERT INTO samples(id, import_id, original_path, original_filename, original_dir, relative_dir, source_pack, size, file_kind, category_id, category_path, confidence, evidence, alternatives, sample_type, method, status, created_at, updated_at) \
+                     VALUES (?1, 'i', ?1, ?1, '', '', '', 0, 'audio', ?2, ?2, 0.5, '[]', '[]', 'one-shot', 'x', ?3, 'now', 'now')",
+                    params![id, cat, status],
+                ).unwrap();
+            }
+            db.conn.execute(
+                "INSERT INTO learned_rules(kind, tokens, scope, category_id, example, created_at, updated_at) VALUES ('group', 'pack/folder percussion/shakers', '', 'percussion/bongos', 'x', 'now', 'now')",
+                [],
+            ).unwrap();
+        }
+        let db = Database::open(&path).unwrap(); // migration runs on open
+        let cat = |id: &str| db.get_sample(id).unwrap().unwrap().category_path;
+        assert_eq!(cat("a"), "Percussion/Percs");
+        assert_eq!(cat("b"), "Percussion/Perc Loops");
+        assert_eq!(cat("c"), "percussion/congas", "organised files are already on disk; left as recorded");
+        let r = &db.learned_rules().unwrap()[0];
+        assert_eq!(r.category_id, "percussion/percs");
+        assert_eq!(r.tokens, ["pack/folder", "percussion/percs"]);
+    }
+}
+
+#[cfg(test)]
 mod learned_tests {
     use super::*;
     use crate::classifier::learned::{Pattern, RuleKind};
@@ -335,7 +373,33 @@ impl Database {
             conn.execute("ALTER TABLE samples ADD COLUMN review_group_size INTEGER", [])?;
         }
         conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '1')", [])?;
+        Self::migrate_perc_v3(&conn)?;
         Ok(Self { conn })
+    }
+
+    /// Percussion was condensed into Percs + Perc Loops (config v3): move
+    /// pending samples and learned rules off the old category ids, once.
+    fn migrate_perc_v3(conn: &Connection) -> CoreResult<()> {
+        let done: Option<String> = conn.query_row("SELECT value FROM meta WHERE key = 'perc_v3'", [], |r| r.get(0)).optional()?;
+        if done.is_some() {
+            return Ok(());
+        }
+        for (old, new, path) in crate::config::PERC_V3_REMAP {
+            conn.execute(
+                "UPDATE samples SET category_id = ?2, category_path = ?3 WHERE category_id = ?1 AND status = 'pending'",
+                params![old, new, path],
+            )?;
+            conn.execute("UPDATE learned_rules SET category_id = ?2 WHERE category_id = ?1", params![old, new])?;
+            // Group rules store the predicted category as their second token.
+            conn.execute(
+                "UPDATE OR IGNORE learned_rules SET tokens = substr(tokens, 1, length(tokens) - length(?1)) || ?2 \
+                 WHERE kind = 'group' AND tokens LIKE '% ' || ?1",
+                params![old, new],
+            )?;
+            conn.execute("DELETE FROM learned_rules WHERE kind = 'group' AND tokens LIKE '% ' || ?1", params![old])?;
+        }
+        conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('perc_v3', 'done')", [])?;
+        Ok(())
     }
 
     // ---------- meta ----------

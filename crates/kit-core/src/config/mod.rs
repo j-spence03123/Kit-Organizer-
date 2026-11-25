@@ -10,7 +10,85 @@ mod defaults;
 pub use defaults::default_config;
 
 /// Current configuration format version.
-pub const CONFIG_VERSION: u32 = 2;
+pub const CONFIG_VERSION: u32 = 3;
+
+/// v3 condensed Percussion into Percs + Perc Loops. Old category ids and
+/// where their files go now.
+pub const PERC_V3_REMAP: &[(&str, &str, &str)] = &[
+    ("percussion/shakers", "percussion/percs", "Percussion/Percs"),
+    ("percussion/tambourines", "percussion/percs", "Percussion/Percs"),
+    ("percussion/congas", "percussion/percs", "Percussion/Percs"),
+    ("percussion/bongos", "percussion/percs", "Percussion/Percs"),
+    ("percussion/cowbells", "percussion/percs", "Percussion/Percs"),
+    ("percussion/woodblocks", "percussion/percs", "Percussion/Percs"),
+    ("percussion/claves", "percussion/percs", "Percussion/Percs"),
+    ("percussion/maracas", "percussion/percs", "Percussion/Percs"),
+    ("percussion/guiros", "percussion/percs", "Percussion/Percs"),
+    ("percussion/agogos", "percussion/percs", "Percussion/Percs"),
+    ("percussion/timpani", "percussion/percs", "Percussion/Percs"),
+    ("percussion/hand-drums", "percussion/percs", "Percussion/Percs"),
+    ("percussion/foley-percussion", "percussion/percs", "Percussion/Percs"),
+    ("percussion/electronic-percussion", "percussion/percs", "Percussion/Percs"),
+    ("percussion/other-percussion", "percussion/percs", "Percussion/Percs"),
+    ("drum-loops/percussion-loops", "percussion/perc-loops", "Percussion/Perc Loops"),
+];
+
+/// Restructure an older saved configuration's Percussion the v3 way, if it
+/// still has the old default subcategories.
+fn condense_percussion(cfg: &mut CategoryConfig) {
+    let defaults = default_config();
+    let Some(new_perc) = defaults.categories.iter().find(|n| n.id == "percussion").cloned() else { return };
+    let Some(perc) = cfg.categories.iter_mut().find(|n| n.id == "percussion") else { return };
+    if !perc.children.iter().any(|c| PERC_V3_REMAP.iter().any(|(old, ..)| *old == c.id)) {
+        return;
+    }
+    // Keep any aliases the user added to the old subcategories.
+    let mut percs = new_perc.children.iter().find(|c| c.id == "percussion/percs").cloned().expect("default percs");
+    let mut extra_children = Vec::new();
+    for child in perc.children.drain(..) {
+        if PERC_V3_REMAP.iter().any(|(old, ..)| *old == child.id) {
+            for a in child.aliases {
+                if !percs.aliases.contains(&a) {
+                    percs.aliases.push(a);
+                }
+            }
+        } else {
+            extra_children.push(child); // the user's own subcategories survive
+        }
+    }
+    let mut loops = new_perc.children.iter().find(|c| c.id == "percussion/perc-loops").cloned().expect("default perc loops");
+    // Move the old Drum Loops/Percussion Loops aliases too.
+    for top in cfg.categories.iter_mut() {
+        if let Some(i) = top.children.iter().position(|c| c.id == "drum-loops/percussion-loops") {
+            let old = top.children.remove(i);
+            for a in old.aliases {
+                if !loops.aliases.contains(&a) {
+                    loops.aliases.push(a);
+                }
+            }
+        }
+    }
+    let perc = cfg.categories.iter_mut().find(|n| n.id == "percussion").expect("still there");
+    perc.children = vec![percs, loops];
+    perc.children.extend(extra_children);
+    perc.default_child = Some("percussion/percs".into());
+    perc.loop_target = Some("percussion/perc-loops".into());
+    perc.aliases.retain(|a| !matches!(a.as_str(), "perc" | "percs" | "perc hit"));
+    // Point every rule that referenced an old id at its new home.
+    fn redirect(nodes: &mut [CategoryNode]) {
+        for n in nodes {
+            for r in [&mut n.loop_target, &mut n.default_child] {
+                if let Some(t) = r.as_deref() {
+                    if let Some((_, new, _)) = PERC_V3_REMAP.iter().find(|(old, ..)| *old == t) {
+                        *r = Some(new.to_string());
+                    }
+                }
+            }
+            redirect(&mut n.children);
+        }
+    }
+    redirect(&mut cfg.categories);
+}
 
 /// Bring an older saved configuration up to date. Returns true if changed.
 /// v2 adds the Construction Kits category (only once: deleting it later is
@@ -27,6 +105,9 @@ pub fn upgrade(cfg: &mut CategoryConfig) -> bool {
                 cfg.categories.insert(at, kits);
             }
         }
+    }
+    if cfg.version < 3 {
+        condense_percussion(cfg);
     }
     cfg.version = CONFIG_VERSION;
     true
@@ -541,7 +622,11 @@ mod tests {
         assert!(c.find_path("One-Shots/Keys/Pianos").is_some());
         assert!(c.find_path("Uncategorised").is_some());
         println!("{} categories", c.nodes.len());
-        assert!(c.nodes.len() > 130);
+        assert!(c.nodes.len() > 110);
+        // Percussion is flat: exactly Percs and Perc Loops.
+        let perc = c.find_path("Percussion").unwrap();
+        let kids: Vec<&str> = c.nodes[perc].children.iter().map(|&i| c.nodes[i].name.as_str()).collect();
+        assert_eq!(kids, ["Percs", "Perc Loops"]);
     }
 
     #[test]
@@ -566,6 +651,34 @@ mod tests {
         old.categories.retain(|n| n.id != "construction-kits");
         assert!(!upgrade(&mut old));
         assert!(!old.categories.iter().any(|n| n.id == "construction-kits"));
+    }
+
+    #[test]
+    fn upgrade_condenses_old_percussion() {
+        // Build a v2-style config: old percussion children + Drum Loops/Percussion Loops.
+        let mut old = default_config();
+        old.version = 2;
+        let perc = old.categories.iter_mut().find(|n| n.id == "percussion").unwrap();
+        let mk = |id: &str, name: &str, aliases: &[&str]| CategoryNode {
+            id: id.into(), name: name.into(), aliases: aliases.iter().map(|s| s.to_string()).collect(), priority: 0,
+            kind: KindHint::Any, loop_target: Some("drum-loops/percussion-loops".into()), default_child: None, children: vec![],
+        };
+        perc.children = vec![mk("percussion/shakers", "Shakers", &["shaker", "my shaky"]), mk("percussion/other-percussion", "Other Percussion", &["triangle"])];
+        perc.default_child = Some("percussion/other-percussion".into());
+        perc.loop_target = Some("drum-loops/percussion-loops".into());
+        let dl = old.categories.iter_mut().find(|n| n.id == "drum-loops").unwrap();
+        dl.children.push(CategoryNode { kind: KindHint::Loop, loop_target: None, ..mk("drum-loops/percussion-loops", "Percussion Loops", &["perc loop"]) });
+        for n in old.categories.iter_mut().filter(|n| n.id == "rims") {
+            n.loop_target = Some("drum-loops/percussion-loops".into());
+        }
+        assert!(upgrade(&mut old));
+        let c = CompiledConfig::compile(&old).unwrap();
+        assert!(c.find_path("Percussion/Percs").is_some() && c.find_path("Percussion/Perc Loops").is_some());
+        assert!(c.find_path("Percussion/Shakers").is_none() && c.find_path("Drum Loops/Percussion Loops").is_none());
+        let percs = old.categories.iter().find(|n| n.id == "percussion").unwrap().children.iter().find(|n| n.id == "percussion/percs").unwrap();
+        assert!(percs.aliases.contains(&"my shaky".to_string()), "custom aliases kept");
+        let rims = old.categories.iter().find(|n| n.id == "rims").unwrap();
+        assert_eq!(rims.loop_target.as_deref(), Some("percussion/perc-loops"));
     }
 
     #[test]

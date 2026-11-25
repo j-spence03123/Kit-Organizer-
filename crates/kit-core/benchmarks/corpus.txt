@@ -14,7 +14,7 @@ Claps | XLNT Riddim Vol 1/DRUMS/ONE SHOTS/CLAPS/XLNT_Clap_01.wav
 Hi-Hats/Closed Hats | XLNT Riddim Vol 1/DRUMS/ONE SHOTS/HATS/XLNT_CHH_01.wav
 Hi-Hats/Open Hats | XLNT Riddim Vol 1/DRUMS/ONE SHOTS/HATS/XLNT_OHH_01.wav
 Cymbals/Crashes | XLNT Riddim Vol 1/DRUMS/ONE SHOTS/CYMBALS/XLNT_Crash_01.wav
-Percussion/Other Percussion | XLNT Riddim Vol 1/DRUMS/ONE SHOTS/PERCS/XLNT_Perc_04.wav
+Percussion/Percs | XLNT Riddim Vol 1/DRUMS/ONE SHOTS/PERCS/XLNT_Perc_04.wav
 Bass/Growls | XLNT Riddim Vol 1/BASS/XLNT_Growl_F.wav
 Bass/Growls | XLNT Riddim Vol 1/BASS/XLNT_Growl_G#.wav
 Bass/Screeches | XLNT Riddim Vol 1/BASS/XLNT_Screech_03_F.wav
@@ -79,7 +79,7 @@ Hi-Hats | Trap Kit Vol 3/Hi Hats/Hat 2.wav
 Hi-Hats/Closed Hats | Trap Kit Vol 3/Hi Hats/Closed Hat 3.wav
 Hi-Hats/Open Hats | Trap Kit Vol 3/Open Hats/OH 05.wav
 Hi-Hats/Open Hats | Trap Kit Vol 3/Open Hats/Open Hat - Sizzle.wav
-Percussion/Other Percussion | Trap Kit Vol 3/Percs/Perc - Knock.wav
+Percussion/Percs | Trap Kit Vol 3/Percs/Perc - Knock.wav
 Rims | Trap Kit Vol 3/Rims/Rimshot 2.wav
 Snaps | Trap Kit Vol 3/Snaps/Snap - Finger.wav
 Vocals/Ad-libs | Trap Kit Vol 3/Vox/Adlib - Yeah.wav
@@ -95,14 +95,14 @@ Melodic Loops/Bell Loops | Trap Kit Vol 3/Melodies/Bell Loop 140bpm.wav
 Kicks | Deep House Essentials/Drums/Kicks/House_Kick_01.wav
 Drum Loops/Kick Loops | Deep House Essentials/Drum Loops/House_Kick_Loop_124BPM.wav
 Drum Loops/Top Loops | Deep House Essentials/Drum Loops/House_Top_Loop_124BPM_01.wav
-Drum Loops/Percussion Loops | Deep House Essentials/Drum Loops/House_Perc_Loop_124BPM.wav
+Percussion/Perc Loops | Deep House Essentials/Drum Loops/House_Perc_Loop_124BPM.wav
 Drum Loops/Hi-Hat Loops | Deep House Essentials/Drum Loops/House_Hat_Loop_124.wav
 Drum Loops/Full Loops | Deep House Essentials/Drum Loops/House_Full_Drum_Loop_124.wav
-Percussion/Shakers | Deep House Essentials/Percussion/Shaker_01.wav
-Percussion/Congas | Deep House Essentials/Percussion/Conga_Hi.wav
-Percussion/Bongos | Deep House Essentials/Percussion/Bongo_Lo.wav
-Percussion/Tambourines | Deep House Essentials/Percussion/Tamb_Hit_02.wav
-Percussion/Cowbells | Deep House Essentials/Percussion/Cowbell_808.wav
+Percussion/Percs | Deep House Essentials/Percussion/Shaker_01.wav
+Percussion/Percs | Deep House Essentials/Percussion/Conga_Hi.wav
+Percussion/Percs | Deep House Essentials/Percussion/Bongo_Lo.wav
+Percussion/Percs | Deep House Essentials/Percussion/Tamb_Hit_02.wav
+Percussion/Percs | Deep House Essentials/Percussion/Cowbell_808.wav
 One-Shots/Chords | Deep House Essentials/Chords/House_Chord_Stab_Cm.wav
 One-Shots/Keys/Organs | Deep House Essentials/Keys/Organ_Bass_Hit_C.wav
 Melodic Loops/Chord Loops | Deep House Essentials/Music Loops/House_Chord_Loop_124_Am.wav
@@ -211,18 +211,18 @@ FX/Other FX | FX Toolkit/Misc/Weird_Thing_01.wav
 Cymbals/Reverse Cymbals | FX Toolkit/Reverse/Reverse Crash.wav
 
 # ---------- Percussion ----------
-Percussion/Woodblocks | World Perc/Woodblock_01.wav
-Percussion/Claves | World Perc/Claves_Hit.wav
-Percussion/Maracas | World Perc/Maracas_Shake_02.wav
-Percussion/Guiros | World Perc/Guiro_Scrape.wav
-Percussion/Agogos | World Perc/Agogo_Hi.wav
-Percussion/Timpani | World Perc/Timpani_Roll_C.wav
-Percussion/Hand Drums | World Perc/Djembe_Slap_03.wav
-Percussion/Hand Drums | World Perc/Tabla_Na.wav
-Percussion/Hand Drums | World Perc/Cajon_Bass.wav
-Percussion/Foley Percussion | World Perc/Foley_Perc_Keys.wav
-Percussion/Electronic Percussion | World Perc/Synth_Perc_Blip_04.wav
-Percussion/Other Percussion | World Perc/Triangle_Hit.wav
+Percussion/Percs | World Perc/Woodblock_01.wav
+Percussion/Percs | World Perc/Claves_Hit.wav
+Percussion/Percs | World Perc/Maracas_Shake_02.wav
+Percussion/Percs | World Perc/Guiro_Scrape.wav
+Percussion/Percs | World Perc/Agogo_Hi.wav
+Percussion/Percs | World Perc/Timpani_Roll_C.wav
+Percussion/Percs | World Perc/Djembe_Slap_03.wav
+Percussion/Percs | World Perc/Tabla_Na.wav
+Percussion/Percs | World Perc/Cajon_Bass.wav
+Percussion/Percs | World Perc/Foley_Perc_Keys.wav
+Percussion/Percs | World Perc/Synth_Perc_Blip_04.wav
+Percussion/Percs | World Perc/Triangle_Hit.wav
 Toms | Drum Kit Acoustic/Toms/Floor_Tom_01.wav
 Toms | Drum Kit Acoustic/Toms/Rack Tom Hi.wav
 Drum Loops/Tom Loops | Drum Kit Acoustic/Loops/Tom_Loop_120.wav
@@ -246,7 +246,7 @@ Snares | Producer Pack/snr_layer_7.wav
 Bass/Growls | Producer Pack/growlbass_04.wav
 Bass/Screeches | Producer Pack/screechbass_02.wav
 Snares | Producer Pack/Snere_Tight_01.wav
-Drum Loops/Percussion Loops | Producer Pack/Shakker_Loop_Thing.wav
+Percussion/Perc Loops | Producer Pack/Shakker_Loop_Thing.wav
 Bass/Screeches | Producer Pack/Bass/Screetch_05.wav
 Vocals/Vocal Chops | Producer Pack/vocalchop_hey_02.wav
 Drum Loops/Kick Loops | Producer Pack/Drum Loops/Kick_Groove_120bpm.wav

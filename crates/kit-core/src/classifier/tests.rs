@@ -92,8 +92,8 @@ fn conventional_drum_kit_names() {
     expect("Trap Kit/Hats/Closed Hat 3.wav", "Hi-Hats/Closed Hats");
     expect("Trap Kit/Hats/OH_05.wav", "Hi-Hats/Open Hats");
     expect("Trap Kit/Hi Hats/hat_2.wav", "Hi-Hats");
-    expect("Trap Kit/Perc/Shaker_01.wav", "Percussion/Shakers");
-    expect("Trap Kit/Perc/perc_weird_03.wav", "Percussion/Other Percussion");
+    expect("Trap Kit/Perc/Shaker_01.wav", "Percussion/Percs");
+    expect("Trap Kit/Perc/perc_weird_03.wav", "Percussion/Percs");
     expect("Trap Kit/808s/808_Long_C.wav", "Bass/808s");
     expect("Trap Kit/Rims/Rimshot_2.wav", "Rims");
     expect("Trap Kit/Cymbals/Crash_01.wav", "Cymbals/Crashes");
@@ -619,7 +619,7 @@ fn construction_kit_drums_and_mixes() {
 fn more_fx_and_perc_words() {
     expect("Kits/V/VFX3 Vinyl Start-Stop/VFX3 Vinyl Start-Stop 52.wav", "FX/Other FX");
     expect("Kits/V/VFX1 Hits & Explode/VFX1 Hits & Explode 24.wav", "FX/Impacts");
-    expect("Kits/V/VAD1 Percussions/VAD1 Clicks 056.wav", "Percussion/Electronic Percussion");
+    expect("Kits/V/VAD1 Percussions/VAD1 Clicks 056.wav", "Percussion/Percs");
 }
 
 #[test]
@@ -678,4 +678,15 @@ fn kits_off_when_category_deleted() {
     let c = Classifier::new(CompiledConfig::compile(&cfg).unwrap());
     let r = run_with(&c, "Kits/V/VFH3 128BPM Shakin Kit/VFH3 128BPM Shakin Drums 1.wav", None);
     assert_ne!(r.category_path, "Construction Kits");
+}
+
+#[test]
+fn percussion_is_just_percs_and_perc_loops() {
+    expect("Kits/World Perc/Conga_Hi.wav", "Percussion/Percs");
+    expect("Kits/World Perc/Djembe_Slap_03.wav", "Percussion/Percs");
+    expect("Kits/House/Percussion/Tamb_Hit_02.wav", "Percussion/Percs");
+    expect("Kits/House/Drum Loops/House_Perc_Loop_124BPM.wav", "Percussion/Perc Loops");
+    expect("Kits/House/Loops/Shaker_Loop_120bpm.wav", "Percussion/Perc Loops");
+    expect("Kits/Trap/Rims/Rimshot_Loop_140bpm.wav", "Percussion/Perc Loops");
+    expect("Kits/Trap/Rims/Rimshot 2.wav", "Rims");
 }
