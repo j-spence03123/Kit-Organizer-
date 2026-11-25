@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let settings = db.settings()?;
     let classifier = Classifier::new(CompiledConfig::compile(&db.category_config()?)?);
     let cancel = AtomicBool::new(false);
-    let rep = scan(&ScanOptions { roots: &roots, exclude: &[], file_types: &settings.file_types }, &cancel, &|_| {})?;
+    let rep = scan(&ScanOptions { roots: &roots, exclude: &[], file_types: &settings.file_types, skip_daw_projects: settings.skip_daw_projects }, &cancel, &|_| {})?;
     let (total, unsupported) = (rep.total, rep.unsupported);
     let opts = AnalyseOptions { threads: settings.threads(), analyse_audio: settings.analyse_audio };
     let analysed = analyse(rep.files, &classifier, &opts, &cancel, &|_| {})?;

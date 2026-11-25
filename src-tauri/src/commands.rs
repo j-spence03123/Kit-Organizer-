@@ -218,7 +218,7 @@ pub fn start_scan(
             let _ = app.emit("scan-progress", ScanProgressEvent { job_id: &job, progress: p });
         };
         let result = (|| -> CoreResult<ImportStats> {
-            let rep = scan(&ScanOptions { roots: &roots, exclude: &exclude, file_types: &settings.file_types }, &cancel, &emit)?;
+            let rep = scan(&ScanOptions { roots: &roots, exclude: &exclude, file_types: &settings.file_types, skip_daw_projects: settings.skip_daw_projects }, &cancel, &emit)?;
             let mut stats = ImportStats {
                 files_discovered: rep.total,
                 supported: rep.files.len() as u64,
@@ -231,6 +231,13 @@ pub fn start_scan(
                 rep.issues.iter().take(200).map(|i| format!("Could not read {}: {}", i.path, i.message)).collect();
             if rep.unsupported > 0 {
                 messages.push(format!("{} unsupported file(s) were left untouched", rep.unsupported));
+            }
+            if !rep.skipped_daw_dirs.is_empty() {
+                messages.push(format!(
+                    "Skipped {} DAW project folder(s) (project recordings/renders, not samples) — turn this off in Settings to include them",
+                    rep.skipped_daw_dirs.len()
+                ));
+                messages.extend(rep.skipped_daw_dirs.iter().take(50).map(|d| format!("Skipped DAW project folder: {d}")));
             }
             let opts = pipeline::AnalyseOptions { threads: settings.threads(), analyse_audio: settings.analyse_audio };
             let analysed = pipeline::analyse(rep.files, &classifier, &opts, &cancel, &emit)?;

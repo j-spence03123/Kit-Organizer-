@@ -253,13 +253,25 @@ impl EvidenceSource for FolderSource {
             if *root {
                 factor *= w.root_folder_factor;
             }
-            for m in text::match_tokens(cfg, toks, &p.context, false) {
+            let matches = text::match_tokens(cfg, toks, &p.context, false);
+            // A folder naming several unrelated categories ("Snare & Kick &
+            // FX Pairs") is a mix: split its weight between them.
+            let mut named: Vec<usize> = Vec::new();
+            for m in &matches {
+                for &(node, ..) in &m.hits {
+                    if !named.iter().any(|&n| n == node || is_ancestor(&cfg.nodes, n, node) || is_ancestor(&cfg.nodes, node, n)) {
+                        named.push(node);
+                    }
+                }
+            }
+            let mix_factor = 1.0 / named.len().max(1) as f32;
+            for m in matches {
                 // A folder named exactly "FX" or "HH" is deliberate, so short
                 // aliases are only weak when they are part of a longer name.
                 let whole_name = m.start == 0 && m.len == toks.len();
                 for &(node, weak, ntok, auto_weak) in &m.hits {
                     let weak = weak && !(auto_weak && whole_name);
-                    let mut pts = (w.folder_near + w.phrase_bonus * ntok.saturating_sub(1) as f32) * factor;
+                    let mut pts = (w.folder_near + w.phrase_bonus * ntok.saturating_sub(1) as f32) * factor * mix_factor;
                     pts *= node_factor(cfg, node);
                     if weak {
                         pts *= w.weak_factor;
@@ -362,10 +374,12 @@ impl EvidenceSource for AudioSource {
             }
         };
         let single = f.onsets <= 2;
-        if f.low_ratio > 0.55 && dur < 1.5 && f.attack_ms < 30.0 && single && decays {
+        // A note with octave ("Moog Saw C1") means a pitched instrument, not a drum.
+        let pitched = musical::has_note_octave(p.stem);
+        if !pitched && f.low_ratio > 0.55 && dur < 1.5 && f.attack_ms < 30.0 && single && decays {
             add("kicks", 1.2, format!("short, punchy, bass-heavy hit ({:.0}% low end)", f.low_ratio * 100.0));
         }
-        if f.low_ratio > 0.55 && dur >= 0.8 && f.decay_ms.is_none_or(|d| d > 500.0) && single {
+        if !pitched && f.low_ratio > 0.55 && dur >= 0.8 && f.decay_ms.is_none_or(|d| d > 500.0) && single {
             add("bass", 1.0, format!("sustained low-frequency tone ({:.0}% low end)", f.low_ratio * 100.0));
         }
         if f.zcr > 0.25 && f.low_ratio < 0.05 && dur < 0.6 && single && decays {
@@ -375,8 +389,8 @@ impl EvidenceSource for AudioSource {
             add("cymbals", 1.0, "bright hit with a long decay".into());
         }
         if dur >= 2.0 && f.onsets >= 4 && f.periodicity > 0.45 && f.zcr < 0.3 {
-            let what = if f.low_ratio > 0.55 { "kicks" } else { "drum-loops" };
-            add(what, 1.0, format!("regular pattern of {} hits", f.onsets));
+            // Bass-heavy full mixes are rhythmic too, so this only says "drum loop".
+            add("drum-loops", 1.0, format!("regular pattern of {} hits", f.onsets));
         }
         if dur >= 2.0 && f.rise_db > 12.0 && f.attack_ms > dur * 500.0 {
             add("fx/risers", 1.2, format!("level rises steadily (+{:.0} dB)", f.rise_db));
@@ -468,6 +482,22 @@ impl Classifier {
             _ => {}
         }
 
+        if let Some(why) = daw_project(input.folders) {
+            return Classification {
+                category_id: cfg.nodes[cfg.uncategorised].id.clone(),
+                category_path: cfg.path_of(cfg.uncategorised).to_string(),
+                confidence: 0.0,
+                evidence: vec![format!("Audio from a DAW project ({why}) — a producer's own recordings or renders, not a sample")],
+                alternatives: vec![],
+                sample_type: SampleType::OneShot,
+                loop_score: None,
+                bpm: musical::bpm_from_name(stem),
+                bpm_source: musical::bpm_from_name(stem).map(|_| "filename".into()),
+                key: None,
+                key_source: None,
+                method: "daw-project".into(),
+            };
+        }
         let n_folders = input.folders.len();
         let (vendor, name_tokens) = text::name_tokens(cfg, stem);
         let folders: Vec<(Vec<String>, usize, bool, &str)> = input
@@ -705,7 +735,16 @@ impl Classifier {
             };
         }
         let related = |a: usize, b: usize| a == b || is_ancestor(&cfg.nodes, a, b) || is_ancestor(&cfg.nodes, b, a);
-        let competitors: Vec<(usize, f32)> = ranked.iter().copied().filter(|&(n, _)| !related(n, winner)).collect();
+        // A weak, generic match in the same family ("melody" next to a piano
+        // loop, both under Melodic Loops) refines rather than contradicts, so
+        // it is listed as an alternative but does not lower confidence.
+        let weak_sibling = |n: usize| {
+            cfg.nodes[n].parent.is_some()
+                && cfg.nodes[n].parent == cfg.nodes[winner].parent
+                && direct.get(&n).is_some_and(|(_, idxs)| idxs.iter().all(|&i| evidence[i].weak))
+        };
+        let all_competitors: Vec<(usize, f32)> = ranked.iter().copied().filter(|&(n, _)| !related(n, winner)).collect();
+        let competitors: Vec<(usize, f32)> = all_competitors.iter().copied().filter(|&(n, _)| !weak_sibling(n)).collect();
         let s2 = competitors.first().map(|c| c.1).unwrap_or(0.0).max(0.0);
 
         // --- Routing ---
@@ -783,7 +822,7 @@ impl Classifier {
         let confidence = ((strength * margin * factor).clamp(0.0, 0.99) * 100.0).round() / 100.0;
 
         let mut alternatives = Vec::new();
-        for (n, s) in competitors.iter().take(4) {
+        for (n, s) in all_competitors.iter().take(4) {
             let (alt, _) = route(*n, &mut Vec::new());
             if alt != final_node && !alternatives.iter().any(|a: &Alternative| a.category_id == cfg.nodes[alt].id) {
                 alternatives.push(Alternative {
@@ -842,6 +881,29 @@ impl Classifier {
             method: "file-type".into(),
         }
     }
+}
+
+/// Detect audio stored inside a DAW project: Ableton's `<Name> Project/
+/// Samples/{Recorded,Processed,Imported}` (incl. Freeze/Consolidate/Crop),
+/// and FL Studio "Project Files"/"Project Bones" folders.
+pub fn daw_project(folders: &[String]) -> Option<&'static str> {
+    let lower: Vec<String> = folders.iter().map(|f| f.to_lowercase()).collect();
+    for (i, f) in lower.iter().enumerate() {
+        if f.ends_with(" project") || f == "project" {
+            let next = lower.get(i + 1).map(String::as_str);
+            let after = lower.get(i + 2).map(String::as_str);
+            if next == Some("samples") && matches!(after, Some("recorded" | "processed" | "imported" | "freeze" | "consolidate" | "crop")) {
+                return Some("Ableton project samples");
+            }
+        }
+        if f.contains("fl project files") || f.contains("project bones") || f.contains("(flp)") {
+            return Some("FL Studio project files");
+        }
+        if f == "ableton project info" {
+            return Some("Ableton project info");
+        }
+    }
+    None
 }
 
 /// Key from the filename, then embedded tags, then the sampler root note.

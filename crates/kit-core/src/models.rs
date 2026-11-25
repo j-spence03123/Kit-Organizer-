@@ -109,6 +109,8 @@ pub struct Settings {
     pub analyse_audio: bool,
     /// Remember manual reassignments and apply them to similar files.
     pub learn_from_corrections: bool,
+    /// Skip audio inside DAW project folders when scanning.
+    pub skip_daw_projects: bool,
 }
 
 impl Default for Settings {
@@ -126,6 +128,7 @@ impl Default for Settings {
             worker_threads: 0,
             analyse_audio: true,
             learn_from_corrections: true,
+            skip_daw_projects: true,
         }
     }
 }

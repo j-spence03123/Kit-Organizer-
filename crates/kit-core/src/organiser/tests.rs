@@ -44,7 +44,7 @@ fn env() -> Env {
 
 fn import(e: &Env, dup: DuplicateHandling) -> String {
     let types = FileTypeSettings::default();
-    let rep = scan(&ScanOptions { roots: std::slice::from_ref(&e.src), exclude: std::slice::from_ref(&e.out), file_types: &types }, &AtomicBool::new(false), &|_| {})
+    let rep = scan(&ScanOptions { roots: std::slice::from_ref(&e.src), exclude: std::slice::from_ref(&e.out), file_types: &types, skip_daw_projects: true }, &AtomicBool::new(false), &|_| {})
         .unwrap();
     assert_eq!(rep.unsupported, 1);
     let c = Classifier::new(CompiledConfig::compile(&default_config()).unwrap());

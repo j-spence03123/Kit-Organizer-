@@ -145,11 +145,15 @@ export function ReviewGroups({ importId, threshold, editable, version, onShowFil
               </div>
             </div>
             <div className="flex items-center gap-1.5">
-              {g.categoryId !== unc && (
-                <Button size="sm" icon={<Check size={13} />} disabled={!editable || busy} onClick={() => void run(() => api.acceptMatching(groupQuery(g)), "Accepted")}>
-                  Accept
-                </Button>
-              )}
+              <Button
+                size="sm"
+                icon={<Check size={13} />}
+                disabled={!editable || busy}
+                title={g.categoryId === unc ? "Leave these in Uncategorised and remove them from the review queue" : `Accept ${g.categoryPath} for all ${g.count} files`}
+                onClick={() => void run(() => api.acceptMatching(groupQuery(g)), g.categoryId === unc ? "Kept" : "Accepted")}
+              >
+                {g.categoryId === unc ? "Keep" : "Accept"}
+              </Button>
               <CategoryPicker
                 label="Move to…"
                 align="right"

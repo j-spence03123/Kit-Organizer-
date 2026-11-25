@@ -31,6 +31,7 @@ export const settings: Settings = {
   workerThreads: 0,
   analyseAudio: false,
   learnFromCorrections: true,
+  skipDawProjects: true,
 };
 
 const node = (id: string, name: string, children: CategoryConfig["categories"] = []) => ({ id, name, aliases: [name.toLowerCase()], priority: 0, kind: "any" as const, children });

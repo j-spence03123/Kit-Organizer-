@@ -39,6 +39,7 @@ export interface Settings {
   workerThreads: number;
   analyseAudio: boolean;
   learnFromCorrections: boolean;
+  skipDawProjects: boolean;
 }
 
 export interface CategoryNode {

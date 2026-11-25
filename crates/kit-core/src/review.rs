@@ -41,6 +41,9 @@ pub struct ReviewOverview {
 /// Why a sample's confidence is low, from its evidence trail.
 pub fn reason(r: &SampleRow, uncategorised_id: &str) -> &'static str {
     let has = |needle: &str| r.evidence.iter().any(|e| e.contains(needle));
+    if r.method == "daw-project" || has("Audio from a DAW project") {
+        return "Audio from a DAW project, not a sample";
+    }
     if r.category_id == uncategorised_id {
         if has("Evidence too weak") {
             return "Only weak hints (e.g. the pack name)";

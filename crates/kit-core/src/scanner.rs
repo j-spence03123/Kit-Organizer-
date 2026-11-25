@@ -33,6 +33,8 @@ pub struct ScanReport {
     pub unsupported: u64,
     pub ignored: u64,
     pub issues: Vec<FsIssue>,
+    /// DAW project folders that were skipped.
+    pub skipped_daw_dirs: Vec<String>,
     /// A sample of unsupported file paths, for display.
     pub unsupported_examples: Vec<String>,
 }
@@ -54,6 +56,19 @@ pub struct ScanOptions<'a> {
     /// Directories never to descend into (the output library).
     pub exclude: &'a [PathBuf],
     pub file_types: &'a FileTypeSettings,
+    /// Skip audio stored inside DAW projects (Ableton `<Name> Project/Samples`,
+    /// FL Studio project files). Skipped folders are reported.
+    pub skip_daw_projects: bool,
+}
+
+/// Is this directory a DAW project's internal audio folder?
+pub fn is_daw_internal_dir(path: &Path) -> bool {
+    let name = path.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let parent = path.parent().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+    (name == "samples" && (parent.ends_with(" project") || parent == "project"))
+        || name == "ableton project info"
+        || name.contains("fl project files")
+        || name.contains("project bones")
 }
 
 fn canonical(p: &Path) -> PathBuf {
@@ -121,6 +136,7 @@ pub fn scan(opts: &ScanOptions, cancel: &AtomicBool, progress: &dyn Fn(&ScanProg
             continue;
         }
         let root_name = root.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let mut skipped: Vec<String> = Vec::new();
         let walker = WalkDir::new(root).follow_links(false).into_iter().filter_entry(|e| {
             if e.depth() == 0 {
                 return true;
@@ -131,6 +147,10 @@ pub fn scan(opts: &ScanOptions, cancel: &AtomicBool, progress: &dyn Fn(&ScanProg
                     return false;
                 }
                 if exclude.iter().any(|x| e.path().starts_with(x)) {
+                    return false;
+                }
+                if opts.skip_daw_projects && is_daw_internal_dir(e.path()) {
+                    skipped.push(e.path().display().to_string());
                     return false;
                 }
             }
@@ -155,6 +175,7 @@ pub fn scan(opts: &ScanOptions, cancel: &AtomicBool, progress: &dyn Fn(&ScanProg
             visit_file(entry.path(), root, opts.file_types, &mut rep);
             emit(&rep, entry.path(), false, &mut last);
         }
+        rep.skipped_daw_dirs.append(&mut skipped);
     }
     emit(&rep, Path::new(""), true, &mut last);
     Ok(rep)
@@ -227,7 +248,7 @@ mod tests {
         touch(&root.join(".hidden/x.wav"));
         let types = FileTypeSettings::default();
         let rep = scan(
-            &ScanOptions { roots: std::slice::from_ref(&root), exclude: &[], file_types: &types },
+            &ScanOptions { roots: std::slice::from_ref(&root), exclude: &[], file_types: &types, skip_daw_projects: true },
             &AtomicBool::new(false),
             &|_| {},
         )
@@ -247,7 +268,7 @@ mod tests {
         touch(&root.join("Organised Samples/Kicks/Kick.wav"));
         let types = FileTypeSettings::default();
         let out = root.join("Organised Samples");
-        let rep = scan(&ScanOptions { roots: &[root], exclude: &[out], file_types: &types }, &AtomicBool::new(false), &|_| {})
+        let rep = scan(&ScanOptions { roots: &[root], exclude: &[out], file_types: &types, skip_daw_projects: true }, &AtomicBool::new(false), &|_| {})
             .unwrap();
         assert_eq!(rep.files.len(), 1);
     }
@@ -270,12 +291,27 @@ mod tests {
     }
 
     #[test]
+    fn skips_daw_project_internals() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path().join("Pack");
+        touch(&root.join("Kicks/Kick.wav"));
+        touch(&root.join("Song Project/Samples/Recorded/1-Audio 0001.wav"));
+        touch(&root.join("Song Project/Ableton Project Info/x.wav"));
+        let types = FileTypeSettings::default();
+        let rep = scan(&ScanOptions { roots: std::slice::from_ref(&root), exclude: &[], file_types: &types, skip_daw_projects: true }, &AtomicBool::new(false), &|_| {}).unwrap();
+        assert_eq!(rep.files.len(), 1);
+        assert_eq!(rep.skipped_daw_dirs.len(), 2);
+        let rep = scan(&ScanOptions { roots: &[root], exclude: &[], file_types: &types, skip_daw_projects: false }, &AtomicBool::new(false), &|_| {}).unwrap();
+        assert_eq!(rep.files.len(), 3);
+    }
+
+    #[test]
     fn cancellation() {
         let d = tempfile::tempdir().unwrap();
         let root = d.path().join("Pack");
         touch(&root.join("Kick.wav"));
         let types = FileTypeSettings::default();
-        let r = scan(&ScanOptions { roots: &[root], exclude: &[], file_types: &types }, &AtomicBool::new(true), &|_| {});
+        let r = scan(&ScanOptions { roots: &[root], exclude: &[], file_types: &types, skip_daw_projects: true }, &AtomicBool::new(true), &|_| {});
         assert!(matches!(r, Err(CoreError::Cancelled)));
     }
 
@@ -289,7 +325,7 @@ mod tests {
         touch(&root.join("locked/Snare.wav"));
         fs::set_permissions(root.join("locked"), fs::Permissions::from_mode(0o000)).unwrap();
         let types = FileTypeSettings::default();
-        let rep = scan(&ScanOptions { roots: std::slice::from_ref(&root), exclude: &[], file_types: &types }, &AtomicBool::new(false), &|_| {})
+        let rep = scan(&ScanOptions { roots: std::slice::from_ref(&root), exclude: &[], file_types: &types, skip_daw_projects: true }, &AtomicBool::new(false), &|_| {})
             .unwrap();
         fs::set_permissions(root.join("locked"), fs::Permissions::from_mode(0o755)).unwrap();
         // Running as root bypasses permissions; only assert when it applied.

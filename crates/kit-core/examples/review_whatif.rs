@@ -52,6 +52,20 @@ fn main() {
     }
     let mut lv: Vec<_> = left.into_iter().collect();
     lv.sort_by_key(|g| std::cmp::Reverse(g.1 .0));
+    let mut lost: BTreeMap<(String, String), usize> = BTreeMap::new();
+    for (case, r) in cases.iter().zip(&res) {
+        let r = r.as_ref().unwrap();
+        if case.expected != "Uncategorised" && r.category_path == "Uncategorised" {
+            let folder = case.path.rsplit('/').nth(1).unwrap_or("").to_string();
+            let reason = r.evidence.first().cloned().unwrap_or_default();
+            let short = if reason.contains("DAW") { "DAW project" } else if reason.contains("too weak") { "too weak" } else { "no keywords" };
+            *lost.entry((format!("{} <- was {}", short, case.expected), folder)).or_default() += 1;
+        }
+    }
+    let mut lo: Vec<_> = lost.into_iter().collect();
+    lo.sort_by_key(|g| std::cmp::Reverse(g.1));
+    println!("NEWLY UNCATEGORISED (names only, no audio)");
+    for ((r, f), n) in lo.iter().take(25) { println!("{n:5} {r:<52} [{f}]"); }
     println!("STILL UNCATEGORISED");
     for (f, (n, ex)) in lv.iter().take(30) { println!("{n:5} [{f}] e.g. {ex}"); }
     println!("CONFIDENT NEW GROUPS");

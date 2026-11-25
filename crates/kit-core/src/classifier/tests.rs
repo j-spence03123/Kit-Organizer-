@@ -542,3 +542,45 @@ fn flat_folders_do_not_spread_their_majority() {
     let out = classify_batch(&items, &c);
     assert_ne!(out[5].as_ref().unwrap().category_path, "Kicks");
 }
+
+// ---------- second review-list round ----------
+
+#[test]
+fn chord_names_do_not_compete_with_melody() {
+    let r = expect("Kits/V/Vengeance - Essential Dubstep Vol.1/VDUB1 Melody Loops/VDUB1 Melody 37 Fm D# A#m C# 140BPM.wav", "Melodic Loops/Full Melody Loops");
+    assert!(r.confidence >= 0.6, "{} {:#?}", r.confidence, r.evidence);
+    assert!(!r.alternatives.iter().any(|a| a.path.starts_with("Bass")), "{:?}", r.alternatives);
+}
+
+#[test]
+fn mixed_folders_split_their_weight() {
+    expect("Kits/V/VUF2 Snare&Kick&FX Pairs 140BPM/VUF2 140BPM Backstage FX 16Bars.wav", "FX/Other FX");
+}
+
+#[test]
+fn daw_project_audio_is_flagged() {
+    let r = run("Kits/Bass Pack/BURST Project/Samples/Recorded/35-Audio 0001 [2025-12-23 200213].wav");
+    assert_eq!(r.category_path, "Uncategorised");
+    assert_eq!(r.method, "daw-project");
+    let r = run("Kits/Pack/BURST Project/Samples/Processed/Freeze/Freeze 3-Audio.wav");
+    assert_eq!(r.method, "daw-project");
+    assert_ne!(run("Kits/Pack/Samples/Kick_01.wav").method, "daw-project");
+}
+
+#[test]
+fn male_female_phrases_are_vocal() {
+    expect("Kits/V/VTDS2 03 Phrases/VTDS2 Phrase Male 023.wav", "Vocals/Vocal Phrases");
+}
+
+#[test]
+fn pitched_low_notes_are_not_kicks() {
+    let r = run_with(&classifier(), "Kits/V/VES1 Saw/Moog Saw C1.wav", Some(&features(kick_features(), 0.6)));
+    assert_ne!(r.category_path, "Kicks", "{:#?}", r.evidence);
+}
+
+#[test]
+fn rhythmic_bass_heavy_mixes_are_drum_loops_not_kick_loops() {
+    let f = crate::audio::AudioFeatures { analysed_secs: 8.0, onsets: 16, periodicity: 0.8, low_ratio: 0.7, ..Default::default() };
+    let r = run_with(&classifier(), "Kits/V/VFH4 Flying Dutchman Kit/VFH4 128BPM Flying Dutchman Mix.wav", Some(&features(f, 8.0)));
+    assert_ne!(r.category_path, "Drum Loops/Kick Loops", "{:#?}", r.evidence);
+}

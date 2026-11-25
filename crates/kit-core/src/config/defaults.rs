@@ -168,7 +168,7 @@ fn tree() -> Vec<B> {
             c("Other FX", &["other fx", "misc fx", "laser", "lasers", "siren", "sirens", "alarm", "scratch", "scratches", "vinyl scratch", "tape stop", "tapestop", "spin back", "spinback", "spin backs", "spinbacks"]),
         ]),
         c("Drum Loops", &["drum loop", "drum loops", "drumloop", "drumloops", "drums loop"]).kind(Loop).default_child("Full Loops").kids(vec![
-            c("Full Loops", &["full loop", "full loops", "full drum loop", "full drums", "full beat", "~beat", "~beats", "~groove", "~grooves", "drum groove", "drum beat"]).priority(-2),
+            c("Full Loops", &["full loop", "full loops", "full drum loop", "full drums", "full beat", "~beat", "~beats", "~groove", "~grooves", "drum groove", "drum beat"]),
             c("Top Loops", &["top loop", "top loops", "~top@drum|drums|loop|loops|groove|beat|perc|hat|hats", "~tops@drum|drums|loop|loops|groove|beat|perc|hat|hats", "drum top", "drum tops"]),
             c("Kick Loops", &["kick loop", "kick loops"]),
             c("Snare Loops", &["snare loop", "snare loops"]),
@@ -196,7 +196,7 @@ fn tree() -> Vec<B> {
             c("Arpeggio Loops", &["arp loop", "arp loops", "arpeggio", "arpeggios", "arpeggio loop", "arpeggiated", "chordpeggio", "chordpeggios"]),
             c("Chord Loops", &["chord loop", "chord loops", "chords loop", "chord progression", "chord progressions", "progression"]),
             c("Orchestral Loops", &["~orchestral", "~orchestra", "orchestral loop", "orchestral loops"]),
-            c("Full Melody Loops", &["~melody", "~melodies", "full melody", "full melody loop", "composition", "song starter", "song starters"]).priority(-2),
+            c("Full Melody Loops", &["~melody", "~melodies", "full melody", "full melody loop", "composition", "song starter", "song starters"]),
             c("Other Melodic Loops", &["other melodic loop"]),
         ]),
         c("One-Shots", &["melodic one shot", "melodic one shots", "music one shot", "instrument one shot"]).default_child("Other One-Shots").loop_to("Melodic Loops/Other Melodic Loops").kids(vec![
@@ -208,7 +208,7 @@ fn tree() -> Vec<B> {
                 c("Electric Pianos", &["electric piano", "electric pianos", "epiano", "e piano", "ep", "rhodes", "wurli", "wurlitzer"]).loop_to("Melodic Loops/Piano Loops"),
                 c("Organs", &["organ", "organs", "hammond", "b3 organ"]).loop_to("Melodic Loops/Piano Loops"),
             ]),
-            c("Synths", &["synth", "synths", "syn", "synthesizer", "synthesiser", "acid", "tb 303", "acid synth"]).loop_to("Melodic Loops/Synth Loops"),
+            c("Synths", &["synth", "synths", "syn", "synthesizer", "synthesiser", "acid", "tb 303", "acid synth", "~saw", "~moog"]).loop_to("Melodic Loops/Synth Loops"),
             c("Bells", &["bell", "bells", "chime", "chimes", "glockenspiel", "glock", "celesta", "music box"]).loop_to("Melodic Loops/Bell Loops"),
             c("Mallets", &["mallet", "mallets", "marimba", "xylophone", "vibraphone", "kalimba"]).loop_to("Melodic Loops/Mallet Loops"),
             c("Strings", &["string", "strings", "violin", "violins", "viola", "cello", "cellos", "pizzicato", "pizz", "str"]).loop_to("Melodic Loops/String Loops"),
@@ -221,12 +221,12 @@ fn tree() -> Vec<B> {
             c("Textures", &["texture shot", "tonal texture", "texture one shot"]),
             c("Other One-Shots", &["other one shot", "misc one shot"]),
         ]),
-        c("Vocals", &["vocal", "vocals", "vox", "voc", "voice", "voices", "vocal sample"]).default_child("Other Vocals").loop_to("Vocals/Vocal Loops").kids(vec![
+        c("Vocals", &["vocal", "vocals", "vox", "voc", "voice", "voices", "vocal sample", "male vocal", "female vocal", "male vox", "female vox", "male voice", "female voice"]).default_child("Other Vocals").loop_to("Vocals/Vocal Loops").kids(vec![
             c("Vocal Chops", &["vocal chop", "vocal chops", "vox chop", "vox chops", "chop@vocal|vocals|vox|voice", "chops@vocal|vocals|vox|voice", "chopped vocal", "chopped@vocal|vocals|vox|voice"]),
             c("Vocal One-Shots", &["vocal one shot", "vocal one shots", "vocal shot", "vocal shots", "vox shot", "vocal hit", "vox hit", "scream", "screams", "vocal scream", "tag", "tags", "producer tag", "producer tags", "dj tag", "dj drop", "dj drops"]),
             c("Ad-libs", &["adlib", "adlibs", "ad lib", "ad libs"]),
             c("Chants", &["chant", "chants", "shout", "shouts", "crowd chant"]),
-            c("Vocal Phrases", &["phrase@vocal|vocals|vox|voice|acapella", "phrases@vocal|vocals|vox|voice|acapella", "vocal phrase", "vocal phrases", "vox phrase", "hook@vocal|vocals|vox|voice|acapella", "hooks@vocal|vocals|vox|voice|acapella"]),
+            c("Vocal Phrases", &["phrase@vocal|vocals|vox|voice|acapella|male|female|sung", "phrases@vocal|vocals|vox|voice|acapella|male|female|sung", "vocal phrase", "vocal phrases", "vox phrase", "hook@vocal|vocals|vox|voice|acapella", "hooks@vocal|vocals|vox|voice|acapella"]),
             c("Acapellas", &["acapella", "acapellas", "a cappella", "acappella", "accapella", "a capella"]),
             c("Vocal Loops", &["vocal loop", "vocal loops", "vox loop", "vox loops"]).kind(Loop),
             c("Harmonies", &["harmony", "harmonies", "vocal harmony"]),

@@ -293,7 +293,32 @@ pub fn strip_credits(stem: &str) -> String {
 pub fn name_tokens(cfg: &CompiledConfig, stem: &str) -> (Option<String>, Vec<String>) {
     let cleaned = strip_credits(stem);
     let (vendor, rest) = split_vendor(cfg, &cleaned);
+    let rest = drop_chord_names(&rest);
     (vendor, expand_compounds(cfg, fine_tokens(&rest)))
+}
+
+/// Remove chord/key names written in musical case — "Fm", "A#m", "Cmaj",
+/// "Bbmin", "A#sus4" — so "Fm" is not read as FM synthesis. All-caps "FM"
+/// is left alone.
+pub fn drop_chord_names(s: &str) -> String {
+    coarse_tokens(s)
+        .into_iter()
+        .filter(|t| !is_chord_name(t))
+        .collect::<Vec<_>>()
+        .join("_")
+}
+
+fn is_chord_name(t: &str) -> bool {
+    let mut chars = t.chars();
+    let Some(first) = chars.next() else { return false };
+    if !('A'..='G').contains(&first) {
+        return false;
+    }
+    let mut rest: &str = &t[1..];
+    if let Some(r) = rest.strip_prefix('#').or_else(|| rest.strip_prefix('b')) {
+        rest = r;
+    }
+    matches!(rest, "m" | "min" | "maj" | "dim" | "aug" | "m7" | "maj7" | "7" | "9" | "sus2" | "sus4" | "add9" | "m9" | "min7")
 }
 
 #[cfg(test)]
@@ -343,6 +368,13 @@ mod tests {
         assert_eq!(v("monsterunderyourbed"), ["monsterunderyourbed"]);
         assert_eq!(v("Outbreak"), ["outbreak"]);
         assert_eq!(v("Organity"), ["organity"]);
+    }
+
+    #[test]
+    fn chord_names_are_not_keywords() {
+        assert_eq!(drop_chord_names("Melody 37 Fm D# A#m C# 140BPM"), "Melody_37_D#_C#_140BPM");
+        assert_eq!(drop_chord_names("FM_Bass_03"), "FM_Bass_03");
+        assert_eq!(drop_chord_names("Melody 27 Fm D# A#sus4"), "Melody_27_D#");
     }
 
     #[test]

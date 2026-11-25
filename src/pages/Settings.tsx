@@ -130,6 +130,12 @@ export default function SettingsPage() {
                 checked={s.analyseAudio}
                 onChange={(v) => set("analyseAudio", v)}
               />
+              <Toggle
+                label="Skip DAW project folders"
+                description="Ignore audio inside Ableton projects (… Project/Samples/Recorded, Freeze, Consolidate) and FL Studio project files. Skipped folders are listed in History."
+                checked={s.skipDawProjects}
+                onChange={(v) => set("skipDawProjects", v)}
+              />
               <Field label="Worker threads" hint="Used for hashing and reading audio headers. 0 = automatic.">
                 <input type="number" min={0} max={32} className={cx(inputBase, "w-24")} value={s.workerThreads} onChange={(e) => set("workerThreads", Math.max(0, Math.min(32, Number(e.target.value) || 0)))} aria-label="Worker threads" />
               </Field>
