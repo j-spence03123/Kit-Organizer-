@@ -9,6 +9,7 @@ pub struct RiffInfo {
     pub acid_one_shot: Option<bool>,
     pub acid_tempo: Option<f32>,
     pub smpl_loops: Option<u32>,
+    pub root_note: Option<u32>,
 }
 
 pub fn read_chunks(path: &Path) -> std::io::Result<RiffInfo> {
@@ -48,6 +49,10 @@ pub fn read_chunks(path: &Path) -> std::io::Result<RiffInfo> {
                 let mut b = [0u8; 36];
                 r.read_exact(&mut b)?;
                 info.smpl_loops = Some(u32::from_le_bytes([b[28], b[29], b[30], b[31]]));
+                let note = u32::from_le_bytes([b[12], b[13], b[14], b[15]]);
+                if note <= 127 {
+                    info.root_note = Some(note);
+                }
             }
             _ => {}
         }

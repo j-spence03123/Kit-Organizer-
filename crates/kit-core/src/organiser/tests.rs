@@ -7,7 +7,7 @@ use crate::config::{default_config, CompiledConfig};
 use crate::db::{Database, SampleQuery};
 use crate::filetypes::FileTypeSettings;
 use crate::models::*;
-use crate::pipeline::{analyse, build_rows};
+use crate::pipeline::{analyse, build_rows, AnalyseOptions};
 use crate::scanner::{scan, ScanOptions};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -48,7 +48,7 @@ fn import(e: &Env, dup: DuplicateHandling) -> String {
         .unwrap();
     assert_eq!(rep.unsupported, 1);
     let c = Classifier::new(CompiledConfig::compile(&default_config()).unwrap());
-    let analysed = analyse(rep.files, &c, 2, &AtomicBool::new(false), &|_| {}).unwrap();
+    let analysed = analyse(rep.files, &c, &AnalyseOptions { threads: 2, analyse_audio: false }, &AtomicBool::new(false), &|_| {}).unwrap();
     let id = uuid::Uuid::new_v4().to_string();
     let mut db = e.db.lock().unwrap();
     db.create_import(&ImportRecord {
@@ -368,7 +368,7 @@ fn rerouted_low_confidence_files_record_their_real_category() {
     write(&e.src.join("Misc/Mystery.wav"), b"mystery");
     write(&e.src.join("Bass/Neuro_Growl.wav"), b"ng"); // ~46%: below threshold
     let id = import(&e, DuplicateHandling::Skip);
-    let lib_root = validate_output(&e.out, "Organised Samples", &[e.src.clone()]).unwrap();
+    let lib_root = validate_output(&e.out, "Organised Samples", std::slice::from_ref(&e.src)).unwrap();
     let samples = e.db.lock().unwrap().samples_for_import(&id).unwrap();
     let p = build_plan(
         &samples,

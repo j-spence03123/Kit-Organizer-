@@ -14,7 +14,7 @@ fn run_with(c: &Classifier, rel: &str, audio: Option<&AudioMeta>) -> Classificat
     let (file, folders) = parts.split_last().unwrap();
     let folders: Vec<String> = folders.iter().map(|s| s.to_string()).collect();
     let kind = crate::filetypes::FileTypeSettings::default().detect(std::path::Path::new(file));
-    c.classify(&ClassifyInput { file_name: file, folders: &folders, kind, audio })
+    c.classify(&ClassifyInput { file_name: file, folders: &folders, kind, audio, hints: &[] })
 }
 
 fn run(rel: &str) -> Classification {
@@ -187,7 +187,7 @@ fn acid_metadata_supports_loop_detection() {
     let r = run_with(&classifier(), "P/Piano_Chords_Am.wav", Some(&meta));
     assert_eq!(r.category_path, "Melodic Loops/Chord Loops", "{:#?}", r.evidence);
     assert_eq!(r.bpm, Some(140.0));
-    assert_eq!(r.bpm_source.as_deref(), Some("metadata"));
+    assert_eq!(r.bpm_source.as_deref(), Some("ACID tag"));
 }
 
 #[test]
@@ -281,4 +281,182 @@ fn loop_context_supports_instrument_loops() {
     assert!(r.confidence >= 0.6, "{} {:#?}", r.confidence, r.evidence);
     let r = expect("P/Drum Loops/Kick_Groove_120bpm.wav", "Drum Loops/Kick Loops");
     assert!(r.confidence >= 0.6, "{} {:#?}", r.confidence, r.evidence);
+}
+
+// ---------- smarter matching ----------
+
+#[test]
+fn typos_are_tolerated_only_when_nothing_matches_exactly() {
+    let r = expect("P/Snere_01.wav", "Snares");
+    assert!(r.evidence[0].contains("probable typo"), "{:#?}", r.evidence);
+    expect("P/XLNT_Screetch_02.wav", "Bass/Screeches");
+    // "Sweet" is one edit from "sweep", but "pad" matched exactly.
+    expect("P/Sweet_Pad_C.wav", "One-Shots/Pads");
+}
+
+#[test]
+fn compounds_are_split() {
+    expect("P/growlbass_04.wav", "Bass/Growls");
+    expect("P/kickroll_01.wav", "Kicks");
+}
+
+#[test]
+fn vendor_prefixes_are_ignored() {
+    // "TT" would otherwise be meaningless noise; "BOS" is a known vendor.
+    let r = expect("BOS Pack/BOS_TT_Snare_03.wav", "Snares");
+    assert!(!r.evidence.iter().any(|e| e.contains("\"bos\"")));
+}
+
+#[test]
+fn context_dependent_aliases() {
+    expect("P/Snare_Roll_01.wav", "Drum Loops/Drum Fills");
+    // "roll" alone (no drum context) is not a fill.
+    assert_eq!(run("P/Roll_Thing.wav").category_path, "Uncategorised");
+    // "top" is a top loop only in a drum context.
+    expect("P/Drum Loops/Top_140.wav", "Drum Loops/Top Loops");
+    assert_eq!(run("P/Top_Shelf_01.wav").category_path, "Uncategorised");
+}
+
+#[test]
+fn fm_is_not_f_major() {
+    let r = expect("P/FM_Bass_03.wav", "Bass/FM Basses");
+    assert_eq!(r.key, None);
+}
+
+// ---------- metadata ----------
+
+#[test]
+fn embedded_tags_are_evidence() {
+    let meta = AudioMeta { title: Some("Deep Kick".into()), genre: Some("One Shot".into()), ..Default::default() };
+    let r = run_with(&classifier(), "P/Sample_034.wav", Some(&meta));
+    assert_eq!(r.category_path, "Kicks", "{:#?}", r.evidence);
+    assert!(r.method.contains("tags"));
+}
+
+#[test]
+fn tag_key_and_bpm() {
+    let meta = AudioMeta { tag_key: Some("Am".into()), tag_bpm: Some(140.0), duration_secs: Some(6.9), ..Default::default() };
+    let r = run_with(&classifier(), "P/Synth_Loop.wav", Some(&meta));
+    assert_eq!(r.key.as_deref(), Some("Am"));
+    assert_eq!(r.key_source.as_deref(), Some("tag"));
+    assert_eq!(r.bpm, Some(140.0));
+    assert_eq!(r.bpm_source.as_deref(), Some("tag"));
+}
+
+#[test]
+fn default_root_note_is_not_a_key() {
+    let c4 = AudioMeta { root_note: Some(60), ..Default::default() };
+    assert_eq!(run_with(&classifier(), "P/Pluck_01.wav", Some(&c4)).key, None);
+    let g = AudioMeta { root_note: Some(67), ..Default::default() };
+    let r = run_with(&classifier(), "P/Pluck_01.wav", Some(&g));
+    assert_eq!(r.key.as_deref(), Some("G"));
+    assert_eq!(r.key_source.as_deref(), Some("sampler root note"));
+}
+
+// ---------- audio analysis ----------
+
+fn features(f: crate::audio::AudioFeatures, secs: f64) -> AudioMeta {
+    AudioMeta { duration_secs: Some(secs), features: Some(f), ..Default::default() }
+}
+
+fn kick_features() -> crate::audio::AudioFeatures {
+    crate::audio::AudioFeatures {
+        analysed_secs: 0.5,
+        low_ratio: 0.8,
+        attack_ms: 5.0,
+        decay_ms: Some(300.0),
+        onsets: 1,
+        ..Default::default()
+    }
+}
+
+#[test]
+fn audio_classifies_nameless_files() {
+    let r = run_with(&classifier(), "P/Sample_034.wav", Some(&features(kick_features(), 0.5)));
+    assert_eq!(r.category_path, "Kicks", "{:#?}", r.evidence);
+    assert!(r.confidence < 0.6, "audio alone should still be reviewed: {}", r.confidence);
+    assert_eq!(r.sample_type, SampleType::OneShot);
+}
+
+#[test]
+fn audio_supports_but_never_overrides_names() {
+    let plain = run("P/Kick_01.wav").confidence;
+    let supported = run_with(&classifier(), "P/Kick_01.wav", Some(&features(kick_features(), 0.5)));
+    assert!(supported.confidence > plain, "{} vs {plain}", supported.confidence);
+    // A "snare" that looks like a kick to the analysis stays a snare at full confidence.
+    let snare = run_with(&classifier(), "P/Snare_01.wav", Some(&features(kick_features(), 0.5)));
+    assert_eq!(snare.category_path, "Snares");
+    assert_eq!(snare.confidence, run("P/Snare_01.wav").confidence);
+    assert!(snare.evidence.iter().any(|e| e.contains("ignored because the names disagree")));
+}
+
+#[test]
+fn audio_rhythm_supports_loops() {
+    let f = crate::audio::AudioFeatures { analysed_secs: 8.0, onsets: 16, periodicity: 0.8, ..Default::default() };
+    let r = run_with(&classifier(), "P/Drums/Hat_Pattern.wav", Some(&features(f, 8.0)));
+    assert_eq!(r.category_path, "Drum Loops/Hi-Hat Loops", "{:#?}", r.evidence);
+}
+
+// ---------- learned rules ----------
+
+fn learned(rules: Vec<(&str, &str, &str)>) -> Classifier {
+    let cfg = CompiledConfig::compile(&default_config()).unwrap();
+    let rules = rules
+        .into_iter()
+        .enumerate()
+        .map(|(i, (example, folders, cat))| {
+            let folders: Vec<String> = folders.split('/').map(String::from).collect();
+            let p = learned::pattern_of(&cfg, example, &folders).unwrap();
+            learned::LearnedRule {
+                id: i as i64,
+                kind: p.kind,
+                tokens: p.tokens,
+                scope: p.scope,
+                category_id: cat.into(),
+                example: example.into(),
+                hits: 1,
+                created_at: String::new(),
+            }
+        })
+        .collect();
+    Classifier::new(cfg).with_learned(rules)
+}
+
+#[test]
+fn learned_patterns() {
+    let cfg = CompiledConfig::compile(&default_config()).unwrap();
+    let p = learned::pattern_of(&cfg, "XLNT_Shot_03_F.wav", &["XLNT Pack".into()]).unwrap();
+    assert_eq!(p.tokens, ["shot"]);
+    assert_eq!(p.scope.as_deref(), Some("xlnt"));
+    let p = learned::pattern_of(&cfg, "XLNT_07.wav", &["XLNT Pack".into(), "Shots".into()]).unwrap();
+    assert_eq!(p.kind, learned::RuleKind::Folder);
+    assert_eq!(p.tokens, ["shots"]);
+}
+
+#[test]
+fn corrections_apply_to_similar_files() {
+    let c = learned(vec![("XLNT_Shot_03_F.wav", "XLNT Pack/Bass", "bass/bass-stabs")]);
+    // Without learning, "shot" alone is only a one-shot hint.
+    assert_ne!(run("XLNT Pack/Bass/XLNT_Shot_07_G.wav").category_path, "Bass/Bass Stabs");
+    let r = run_with(&c, "XLNT Pack/Bass/XLNT_Shot_07_G.wav", None);
+    assert_eq!(r.category_path, "Bass/Bass Stabs", "{:#?}", r.evidence);
+    assert!(r.method.contains("learned"));
+    assert!(r.confidence >= 0.8);
+    // Elsewhere (different vendor) it is weaker but still applies.
+    let other = run_with(&c, "Other Pack/Shot_2.wav", None);
+    assert_eq!(other.category_path, "Bass/Bass Stabs");
+    assert!(other.confidence < r.confidence);
+}
+
+#[test]
+fn learned_rules_do_not_override_clear_names_elsewhere() {
+    let c = learned(vec![("XLNT_Shot_03.wav", "XLNT Pack", "bass/bass-stabs")]);
+    // "Kick Shot" in another pack: partial match only, kick wins.
+    expect_with(&c, "Other Pack/Kick_Shot_01.wav", "Kicks");
+}
+
+#[track_caller]
+fn expect_with(c: &Classifier, rel: &str, path: &str) {
+    let r = run_with(c, rel, None);
+    assert_eq!(r.category_path, path, "{rel}\nevidence: {:#?}", r.evidence);
 }

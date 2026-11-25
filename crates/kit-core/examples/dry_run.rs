@@ -12,7 +12,7 @@ use kit_core::classifier::Classifier;
 use kit_core::config::CompiledConfig;
 use kit_core::db::{now, Database};
 use kit_core::models::*;
-use kit_core::pipeline::{analyse, build_rows};
+use kit_core::pipeline::{analyse, build_rows, AnalyseOptions};
 use kit_core::scanner::{scan, ScanOptions};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -37,7 +37,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cancel = AtomicBool::new(false);
     let rep = scan(&ScanOptions { roots: &roots, exclude: &[], file_types: &settings.file_types }, &cancel, &|_| {})?;
     let (total, unsupported) = (rep.total, rep.unsupported);
-    let analysed = analyse(rep.files, &classifier, settings.threads(), &cancel, &|_| {})?;
+    let opts = AnalyseOptions { threads: settings.threads(), analyse_audio: settings.analyse_audio };
+    let analysed = analyse(rep.files, &classifier, &opts, &cancel, &|_| {})?;
     let id = uuid::Uuid::new_v4().to_string();
     db.create_import(&ImportRecord {
         id: id.clone(),

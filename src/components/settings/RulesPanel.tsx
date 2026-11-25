@@ -14,6 +14,12 @@ const WEIGHTS: [keyof ClassifierWeights, string, string][] = [
   ["priorityStep", "Priority step", "Points per category priority level"],
   ["saturation", "Saturation", "Higher = more evidence needed for high confidence"],
   ["loopThreshold", "Loop threshold", "Loop score needed to treat a sample as a loop"],
+  ["minScore", "Minimum score", "Below this the file goes to Uncategorised"],
+  ["metadata", "Embedded tag match", "Points for a keyword in title/genre/comment tags"],
+  ["fuzzyFactor", "Typo match factor", "Multiplier for misspelt keywords"],
+  ["learned", "Learned rule", "Points for matching one of your corrections"],
+  ["sibling", "Sibling agreement", "Points when other files in the folder agree"],
+  ["audio", "Audio analysis factor", "Multiplier for audio evidence (0 = off)"],
 ];
 
 function terms(list: string[]): string {
@@ -51,6 +57,9 @@ export function RulesPanel({ draft, onChange }: { draft: CategoryConfig; onChang
       </div>
       <Field label="Generic folder names" hint="Folders with these names add no category evidence (e.g. Samples, One Shots).">
         <textarea className={`${inputClass} h-20 py-1.5`} defaultValue={terms(draft.genericFolderTerms)} onBlur={(e) => onChange({ ...draft, genericFolderTerms: parse(e.target.value) })} aria-label="Generic folder names" />
+      </Field>
+      <Field label="Vendor prefixes" hint="Leading words like XLNT_ or BOS_ that are ignored in filenames. Unknown ALL-CAPS prefixes are detected automatically.">
+        <textarea className={`${inputClass} h-16 py-1.5`} defaultValue={terms(draft.vendorPrefixes ?? [])} onBlur={(e) => onChange({ ...draft, vendorPrefixes: parse(e.target.value) })} aria-label="Vendor prefixes" />
       </Field>
       <Field label="Loop indicators">
         <textarea className={`${inputClass} h-16 py-1.5`} defaultValue={terms(draft.loopTerms)} onBlur={(e) => onChange({ ...draft, loopTerms: parse(e.target.value) })} aria-label="Loop indicators" />

@@ -118,6 +118,18 @@ export default function SettingsPage() {
                   ]}
                 />
               </Field>
+              <Toggle
+                label="Learn from my corrections"
+                description="When you reassign a sample, files with the same naming pattern are classified the same way in future. Manage learned rules on the Categories page."
+                checked={s.learnFromCorrections}
+                onChange={(v) => set("learnFromCorrections", v)}
+              />
+              <Toggle
+                label="Analyse audio content"
+                description="Decodes up to 10 seconds of each file to measure low end, brightness, hits and rhythm. Used only as supporting evidence; makes scans slower."
+                checked={s.analyseAudio}
+                onChange={(v) => set("analyseAudio", v)}
+              />
               <Field label="Worker threads" hint="Used for hashing and reading audio headers. 0 = automatic.">
                 <input type="number" min={0} max={32} className={cx(inputBase, "w-24")} value={s.workerThreads} onChange={(e) => set("workerThreads", Math.max(0, Math.min(32, Number(e.target.value) || 0)))} aria-label="Worker threads" />
               </Field>

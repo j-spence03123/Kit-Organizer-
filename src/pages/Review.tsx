@@ -10,7 +10,7 @@ import { useApp } from "../hooks/useApp";
 import { usePlayer } from "../hooks/useAudioPlayer";
 import { useDebounced, useSampleQuery } from "../hooks/useSampleQuery";
 import { api, errorMessage } from "../services/api";
-import type { ImportRecord, ImportSummary, SampleQuery, SampleRow } from "../types";
+import type { ImportRecord, ImportSummary, SampleQuery, SampleRow, SimilarSamples } from "../types";
 import { basename, cx, formatDate, formatNumber } from "../utils/format";
 
 const PAGE = 200;
@@ -35,6 +35,7 @@ export default function Review() {
   const [organiseOpen, setOrganiseOpen] = useState(false);
   const [packDialog, setPackDialog] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [similar, setSimilar] = useState<SimilarSamples | null>(null);
   const debounced = useDebounced(search);
   const player = usePlayer();
   // Optional "play on select" preference.
@@ -110,7 +111,21 @@ export default function Review() {
 
   const ids = [...selected];
   const catName = (id: string) => categories.find((c) => c.id === id)?.path ?? id;
-  const reassign = (list: string[], id: string) => run(() => api.reassignSamples(list, id), `Moved ${list.length} sample(s) to ${catName(id)}`);
+  const reassign = async (list: string[], id: string) => {
+    await run(() => api.reassignSamples(list, id), `Moved ${list.length} sample(s) to ${catName(id)}`);
+    // Offer to fix files that follow the same naming pattern.
+    try {
+      setSimilar(await api.similarSamples(list));
+    } catch {
+      setSimilar(null);
+    }
+  };
+  const applySimilar = async () => {
+    if (!similar) return;
+    const s = similar;
+    setSimilar(null);
+    await run(() => api.reassignSamples(s.ids, s.categoryId), `Moved ${s.ids.length} similar sample(s) to ${s.categoryPath}`);
+  };
   const accept = (list: string[]) => run(() => api.markReviewed(list, true), `Accepted ${list.length} prediction(s)`);
   const dup = (list: string[], d: "keep" | "skip") => run(() => api.setDuplicateDecision(list, d));
   const pack = (list: string[], name: string) => run(() => api.setSourcePack(list, name), "Source pack updated");
@@ -248,6 +263,21 @@ export default function Review() {
           <IconButton label="Clear selection" onClick={() => setSelected(new Set())} className="ml-auto">
             <X size={14} />
           </IconButton>
+        </div>
+      )}
+
+      {similar && (
+        <div className="flex items-center gap-3 border-b border-line bg-panel-2 px-6 py-2 text-xs" role="status" aria-label="Similar files">
+          <Sparkles size={14} className="shrink-0 text-accent" />
+          <span className="min-w-0 flex-1">
+            Found <strong>{formatNumber(similar.ids.length)}</strong> more {similar.description}. Move them to <strong>{similar.categoryPath}</strong> too?
+          </span>
+          <Button size="sm" variant="primary" disabled={busy} onClick={() => void applySimilar()}>
+            Apply to {formatNumber(similar.ids.length)}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSimilar(null)}>
+            Dismiss
+          </Button>
         </div>
       )}
 

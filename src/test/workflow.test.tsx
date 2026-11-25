@@ -104,4 +104,28 @@ describe("primary workflow", () => {
     await screen.findByText("Your samples are organised");
     expect(backend.current!.calls.find((c) => c.name === "organise")?.args).toEqual(["imp1", "/out", "move", true]);
   });
+
+  it("offers to apply a correction to similar files", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(within(await screen.findByRole("navigation", { name: "Main" })).getByRole("button", { name: /import samples/i }));
+    pickQueue.push(["/packs/XLNT"], ["/out"]);
+    await user.click(screen.getByRole("button", { name: /browse folders/i }));
+    await user.click(screen.getByRole("button", { name: /^choose$/i }));
+    await user.click(screen.getByRole("button", { name: /scan 1 folder/i }));
+    const table = await screen.findByRole("table", { name: /samples/i });
+
+    backend.current!.api.similarSamples = async () => ({ ids: ["s1", "s2"], description: "files named like “mystery”", categoryId: "kicks", categoryPath: "Kicks" });
+    await user.click(await within(table).findByText("Mystery_01.wav"));
+    const details = screen.getByRole("complementary", { name: /sample details/i });
+    await user.click(within(details).getByRole("button", { name: /change category/i }));
+    await user.click(within(details).getByRole("option", { name: "Kicks" }));
+
+    const banner = await screen.findByRole("status", { name: /similar files/i });
+    expect(banner).toHaveTextContent("Found 2 more files named like “mystery”");
+    await user.click(within(banner).getByRole("button", { name: /apply to 2/i }));
+    const calls = backend.current!.calls.filter((c) => c.name === "reassignSamples");
+    expect(calls.at(-1)?.args).toEqual([["s1", "s2"], "kicks"]);
+    await waitFor(() => expect(screen.queryByRole("status", { name: /similar files/i })).not.toBeInTheDocument());
+  });
 });

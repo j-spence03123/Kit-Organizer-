@@ -15,8 +15,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(db: Arc<Mutex<Database>>, recovery: Vec<String>) -> Result<Self, Box<dyn std::error::Error>> {
-        let cfg = db.lock().map_err(|_| "database lock poisoned")?.category_config()?;
-        let classifier = Classifier::new(CompiledConfig::compile(&cfg)?);
+        let classifier = build_classifier(&*db.lock().map_err(|_| "database lock poisoned")?)?;
         Ok(Self {
             db,
             classifier: RwLock::new(Arc::new(classifier)),
@@ -37,6 +36,13 @@ impl AppState {
         *self.classifier.write().unwrap_or_else(|p| p.into_inner()) = Arc::new(c);
     }
 
+    /// Rebuild the classifier from the saved configuration and learned rules.
+    pub fn rebuild_classifier(&self) -> kit_core::CoreResult<()> {
+        let c = build_classifier(&self.db())?;
+        self.set_classifier(c);
+        Ok(())
+    }
+
     pub fn register_job(&self, id: &str) -> Arc<AtomicBool> {
         let flag = Arc::new(AtomicBool::new(false));
         self.jobs.lock().unwrap_or_else(|p| p.into_inner()).insert(id.to_string(), flag.clone());
@@ -50,4 +56,10 @@ impl AppState {
     pub fn job_running(&self, id: &str) -> bool {
         self.jobs.lock().unwrap_or_else(|p| p.into_inner()).contains_key(id)
     }
+}
+
+/// Classifier with the saved categories plus rules learned from corrections.
+pub fn build_classifier(db: &Database) -> kit_core::CoreResult<Classifier> {
+    let cfg = db.category_config()?;
+    Ok(Classifier::new(CompiledConfig::compile(&cfg)?).with_learned(db.learned_rules()?))
 }

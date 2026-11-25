@@ -13,12 +13,13 @@ interface Props {
   bpm: number | null;
   bpmSource: string | null;
   musicalKey: string | null;
+  keySource?: string | null;
   playable: boolean;
 }
 
 /** Transport, waveform and metadata for one sample. Values that are not
  * reliably known are shown as "Unknown" — never estimated. */
-export function PreviewPlayer({ path, name, audio, bpm, bpmSource, musicalKey, playable }: Props) {
+export function PreviewPlayer({ path, name, audio, bpm, bpmSource, musicalKey, keySource, playable }: Props) {
   const p = usePlayer();
   const [loop, setLoop] = useState(false);
   const active = p.path === path;
@@ -31,7 +32,7 @@ export function PreviewPlayer({ path, name, audio, bpm, bpmSource, musicalKey, p
     ["Channels", audio?.channels ? (audio.channels === 1 ? "Mono" : audio.channels === 2 ? "Stereo" : String(audio.channels)) : "Unknown"],
     ["Bit depth", audio?.bitDepth ? `${audio.bitDepth}-bit` : "Unknown"],
     ["BPM", bpm ? `${Number.isInteger(bpm) ? bpm : bpm.toFixed(2)}${bpmSource ? ` (${bpmSource})` : ""}` : "Unknown"],
-    ["Key", musicalKey ? `${musicalKey} (filename)` : "Unknown"],
+    ["Key", musicalKey ? `${musicalKey} (${keySource ?? "filename"})` : "Unknown"],
   ];
 
   return (

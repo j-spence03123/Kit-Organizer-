@@ -105,6 +105,10 @@ pub struct Settings {
     pub appearance: AppearanceSettings,
     /// Worker threads for hashing/probing. `0` = automatic.
     pub worker_threads: usize,
+    /// Decode a few seconds of each file for signal analysis during scans.
+    pub analyse_audio: bool,
+    /// Remember manual reassignments and apply them to similar files.
+    pub learn_from_corrections: bool,
 }
 
 impl Default for Settings {
@@ -120,6 +124,8 @@ impl Default for Settings {
             preview: PreviewSettings::default(),
             appearance: AppearanceSettings::default(),
             worker_threads: 0,
+            analyse_audio: true,
+            learn_from_corrections: true,
         }
     }
 }
@@ -190,6 +196,8 @@ pub struct SampleRow {
     pub bpm: Option<f32>,
     pub bpm_source: Option<String>,
     pub key: Option<String>,
+    #[serde(default)]
+    pub key_source: Option<String>,
     pub method: String,
     pub audio: Option<AudioMeta>,
     pub manual_override: bool,

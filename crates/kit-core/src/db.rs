@@ -82,6 +82,18 @@ CREATE TABLE IF NOT EXISTS operations (
     updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ops_import ON operations(import_id);
+CREATE TABLE IF NOT EXISTS learned_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    tokens TEXT NOT NULL,
+    scope TEXT NOT NULL DEFAULT '',
+    category_id TEXT NOT NULL,
+    example TEXT NOT NULL,
+    hits INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(kind, tokens, scope)
+);
 "#;
 
 pub struct Database {
@@ -154,6 +166,28 @@ pub struct DashboardStats {
     pub last_output_dir: Option<String>,
 }
 
+#[cfg(test)]
+mod learned_tests {
+    use super::*;
+    use crate::classifier::learned::{Pattern, RuleKind};
+
+    #[test]
+    fn upsert_replaces_and_counts() {
+        let db = Database::open_in_memory().unwrap();
+        let p = Pattern { kind: RuleKind::Name, tokens: vec!["shot".into()], scope: Some("xlnt".into()) };
+        db.upsert_learned(&p, "bass/bass-stabs", "XLNT_Shot_01.wav").unwrap();
+        db.upsert_learned(&p, "bass/bass-stabs", "XLNT_Shot_02.wav").unwrap();
+        let r = db.learned_rules().unwrap();
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].hits, 2);
+        db.upsert_learned(&p, "kicks", "XLNT_Shot_03.wav").unwrap();
+        let r = db.learned_rules().unwrap();
+        assert_eq!((r[0].category_id.as_str(), r[0].hits), ("kicks", 1));
+        db.delete_learned(r[0].id).unwrap();
+        assert!(db.learned_rules().unwrap().is_empty());
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OperationRow {
@@ -180,7 +214,7 @@ fn from_json<T: for<'de> Deserialize<'de> + Default>(s: Option<String>) -> T {
 
 const SAMPLE_COLS: &str = "id, import_id, original_path, original_filename, original_dir, relative_dir, source_pack, size, hash, \
     file_kind, category_id, category_path, confidence, evidence, alternatives, sample_type, bpm, bpm_source, musical_key, method, \
-    audio, manual_override, reviewed, status, duplicate_of, duplicate_path, dup_decision, destination_path, error, created_at, updated_at";
+    audio, manual_override, reviewed, status, duplicate_of, duplicate_path, dup_decision, destination_path, error, created_at, updated_at, key_source";
 
 fn sample_from_row(r: &Row) -> rusqlite::Result<SampleRow> {
     let kind: String = r.get(9)?;
@@ -224,6 +258,7 @@ fn sample_from_row(r: &Row) -> rusqlite::Result<SampleRow> {
         error: r.get(28)?,
         created_at: r.get(29)?,
         updated_at: r.get(30)?,
+        key_source: r.get(31)?,
     })
 }
 
@@ -270,6 +305,15 @@ impl Database {
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.execute_batch(SCHEMA)?;
+        // Additive migrations for databases created by older versions.
+        let has_col = |table: &str, col: &str| -> rusqlite::Result<bool> {
+            let mut st = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+            let names = st.query_map([], |r| r.get::<_, String>(1))?.collect::<Result<Vec<_>, _>>()?;
+            Ok(names.iter().any(|n| n == col))
+        };
+        if !has_col("samples", "key_source")? {
+            conn.execute("ALTER TABLE samples ADD COLUMN key_source TEXT", [])?;
+        }
         conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '1')", [])?;
         Ok(Self { conn })
     }
@@ -393,7 +437,7 @@ impl Database {
         let tx = self.conn.transaction()?;
         {
             let mut st = tx.prepare(&format!(
-                "INSERT INTO samples({SAMPLE_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31)"
+                "INSERT INTO samples({SAMPLE_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32)"
             ))?;
             for s in rows {
                 st.execute(params![
@@ -428,6 +472,7 @@ impl Database {
                     s.error,
                     s.created_at,
                     s.updated_at,
+                    s.key_source,
                 ])?;
             }
         }
@@ -585,7 +630,7 @@ impl Database {
         {
             let mut st = tx.prepare(
                 "UPDATE samples SET category_id=?2, category_path=?3, confidence=?4, evidence=?5, alternatives=?6, sample_type=?7, \
-                 bpm=?8, bpm_source=?9, musical_key=?10, method=?11, updated_at=?12 WHERE id=?1 AND manual_override = 0 AND status='pending'",
+                 bpm=?8, bpm_source=?9, musical_key=?10, method=?11, updated_at=?12, key_source=?13 WHERE id=?1 AND manual_override = 0 AND status='pending'",
             )?;
             let ts = now();
             for s in rows {
@@ -601,7 +646,8 @@ impl Database {
                     s.bpm_source,
                     s.key,
                     s.method,
-                    ts
+                    ts,
+                    s.key_source
                 ])?;
             }
         }
@@ -761,6 +807,58 @@ impl Database {
             }
         }
         tx.commit()?;
+        Ok(())
+    }
+
+    // ---------- learned rules ----------
+
+    /// Remember a correction. Re-teaching the same pattern with a new
+    /// category replaces the old one.
+    pub fn upsert_learned(&self, p: &crate::classifier::learned::Pattern, category_id: &str, example: &str) -> CoreResult<()> {
+        let ts = now();
+        self.conn.execute(
+            "INSERT INTO learned_rules(kind, tokens, scope, category_id, example, hits, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6) \
+             ON CONFLICT(kind, tokens, scope) DO UPDATE SET \
+               hits = CASE WHEN learned_rules.category_id = excluded.category_id THEN learned_rules.hits + 1 ELSE 1 END, \
+               category_id = excluded.category_id, example = excluded.example, updated_at = excluded.updated_at",
+            params![p.kind.as_str(), p.tokens.join(" "), p.scope.clone().unwrap_or_default(), category_id, example, ts],
+        )?;
+        Ok(())
+    }
+
+    pub fn learned_rules(&self) -> CoreResult<Vec<crate::classifier::learned::LearnedRule>> {
+        use crate::classifier::learned::{LearnedRule, RuleKind};
+        let mut st = self.conn.prepare(
+            "SELECT id, kind, tokens, scope, category_id, example, hits, created_at FROM learned_rules ORDER BY updated_at DESC, id DESC",
+        )?;
+        let rows = st
+            .query_map([], |r| {
+                let kind: String = r.get(1)?;
+                let tokens: String = r.get(2)?;
+                let scope: String = r.get(3)?;
+                Ok(LearnedRule {
+                    id: r.get(0)?,
+                    kind: if kind == "folder" { RuleKind::Folder } else { RuleKind::Name },
+                    tokens: tokens.split(' ').filter(|t| !t.is_empty()).map(String::from).collect(),
+                    scope: (!scope.is_empty()).then_some(scope),
+                    category_id: r.get(4)?,
+                    example: r.get(5)?,
+                    hits: r.get::<_, i64>(6)? as u32,
+                    created_at: r.get(7)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    pub fn delete_learned(&self, id: i64) -> CoreResult<()> {
+        self.conn.execute("DELETE FROM learned_rules WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
+    pub fn clear_learned(&self) -> CoreResult<()> {
+        self.conn.execute("DELETE FROM learned_rules", [])?;
         Ok(())
     }
 

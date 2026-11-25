@@ -19,37 +19,46 @@ pub struct Analysed {
     pub classification: Classification,
 }
 
-/// Probe, hash and classify every file using a bounded thread pool. Audio
-/// is never fully decoded here — only headers are read — and files are
-/// hashed by streaming, so memory stays flat for large libraries.
+#[derive(Debug, Clone)]
+pub struct AnalyseOptions {
+    pub threads: usize,
+    /// Decode a few seconds of each audio file for signal analysis.
+    pub analyse_audio: bool,
+}
+
+/// Probe, hash (and optionally analyse) every file using a bounded thread
+/// pool, then classify the batch with sibling context. Files are hashed by
+/// streaming and at most a few seconds of audio are decoded, so memory
+/// stays flat for large libraries.
 pub fn analyse(
     files: Vec<ScannedFile>,
     classifier: &Classifier,
-    threads: usize,
+    opts: &AnalyseOptions,
     cancel: &AtomicBool,
     progress: &(dyn Fn(&ScanProgress) + Sync),
 ) -> CoreResult<Vec<Analysed>> {
     let total = files.len() as u64;
     let done = AtomicU64::new(0);
     let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(threads.max(1))
+        .num_threads(opts.threads.max(1))
         .build()
         .map_err(|e| CoreError::Other(format!("cannot start worker pool: {e}")))?;
-    let out: Vec<Option<Analysed>> = pool.install(|| {
+    type Prepped = (ScannedFile, Option<AudioMeta>, Result<String, String>);
+    let prepped: Vec<Option<Prepped>> = pool.install(|| {
         files
             .into_par_iter()
             .map(|file| {
                 if cancel.load(Ordering::Relaxed) {
                     return None;
                 }
-                let audio = (file.kind == FileKind::Audio).then(|| audio::probe(&file.path));
-                let hash = hash_file(&file.path).map_err(|e| e.to_string());
-                let classification = classifier.classify(&ClassifyInput {
-                    file_name: &file.file_name,
-                    folders: &file.folders,
-                    kind: file.kind,
-                    audio: audio.as_ref(),
+                let audio = (file.kind == FileKind::Audio).then(|| {
+                    let mut m = audio::probe(&file.path);
+                    if opts.analyse_audio && m.error.is_none() {
+                        m.features = audio::analyse_file(&file.path).ok();
+                    }
+                    m
                 });
+                let hash = hash_file(&file.path).map_err(|e| e.to_string());
                 let n = done.fetch_add(1, Ordering::Relaxed) + 1;
                 if n.is_multiple_of(25) || n == total {
                     progress(&ScanProgress {
@@ -62,16 +71,102 @@ pub fn analyse(
                         current: file.file_name.clone(),
                     });
                 }
-                Some(Analysed { file, audio, hash, classification })
+                Some((file, audio, hash))
             })
             .collect()
     });
     if cancel.load(Ordering::Relaxed) {
         return Err(CoreError::Cancelled);
     }
-    let mut v: Vec<Analysed> = out.into_iter().flatten().collect();
-    v.sort_by(|a, b| a.file.path.cmp(&b.file.path));
-    Ok(v)
+    let mut prepped: Vec<_> = prepped.into_iter().flatten().collect();
+    prepped.sort_by(|a, b| a.0.path.cmp(&b.0.path));
+    let groups: Vec<String> = prepped.iter().map(|(f, _, _)| f.path.parent().map(|p| p.display().to_string()).unwrap_or_default()).collect();
+    let items: Vec<BatchItem> = prepped
+        .iter()
+        .zip(&groups)
+        .map(|((f, a, _), g)| BatchItem { file_name: &f.file_name, folders: &f.folders, kind: f.kind, audio: a.as_ref(), group: g, fixed: None })
+        .collect();
+    let classes = pool.install(|| classify_batch(&items, classifier));
+    Ok(prepped
+        .into_iter()
+        .zip(classes)
+        .map(|((file, audio, hash), classification)| Analysed { file, audio, hash, classification: classification.expect("not fixed") })
+        .collect())
+}
+
+/// One file in a batch classification.
+pub struct BatchItem<'a> {
+    pub file_name: &'a str,
+    pub folders: &'a [String],
+    pub kind: FileKind,
+    pub audio: Option<&'a AudioMeta>,
+    /// Files with the same group (their folder) give each other context.
+    pub group: &'a str,
+    /// A category the user already chose. Not reclassified, but counted
+    /// as confident context for its siblings.
+    pub fixed: Option<(&'a str, &'a str)>, // (category id, path)
+}
+
+/// Confidence at which a classification is trusted as sibling context.
+pub const SIBLING_CONFIDENT: f32 = 0.7;
+
+/// Classify a batch. Pass 1 classifies each file on its own. Pass 2: in
+/// folders of 3+ files where at least two confident files (or manual
+/// corrections) agree and make up 60%+ of the confident files, every
+/// low-confidence file gets supporting evidence for that category and is
+/// re-classified. Returns `None` for fixed items.
+pub fn classify_batch(items: &[BatchItem], classifier: &Classifier) -> Vec<Option<Classification>> {
+    let input = |it: &BatchItem<'_>, hints: &[crate::classifier::Hint]| -> Classification {
+        classifier.classify(&ClassifyInput { file_name: it.file_name, folders: it.folders, kind: it.kind, audio: it.audio, hints })
+    };
+    let mut out: Vec<Option<Classification>> =
+        items.par_iter().map(|it| if it.fixed.is_some() { None } else { Some(input(it, &[])) }).collect();
+
+    let mut groups: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (i, it) in items.iter().enumerate() {
+        if it.kind == FileKind::Audio {
+            groups.entry(it.group).or_default().push(i);
+        }
+    }
+    let uncategorised = classifier.config().nodes[classifier.config().uncategorised].id.clone();
+    let mut todo: Vec<(usize, crate::classifier::Hint)> = Vec::new();
+    for idxs in groups.values().filter(|v| v.len() >= 3) {
+        let mut counts: HashMap<(String, String), usize> = HashMap::new();
+        let mut confident = 0usize;
+        for &i in idxs {
+            let cat = match (&items[i].fixed, &out[i]) {
+                (Some((id, path)), _) => Some((id.to_string(), path.to_string())),
+                (None, Some(c)) if c.confidence >= SIBLING_CONFIDENT && c.category_id != uncategorised => {
+                    Some((c.category_id.clone(), c.category_path.clone()))
+                }
+                _ => None,
+            };
+            if let Some(k) = cat {
+                confident += 1;
+                *counts.entry(k).or_default() += 1;
+            }
+        }
+        let Some(((id, path), n)) = counts.into_iter().max_by(|a, b| a.1.cmp(&b.1).then_with(|| b.0.cmp(&a.0))) else { continue };
+        let share = n as f32 / confident.max(1) as f32;
+        if n < 2 || share < 0.6 {
+            continue;
+        }
+        let points = classifier.config().source.weights.sibling * share;
+        for &i in idxs {
+            if let Some(c) = &out[i] {
+                if c.confidence < SIBLING_CONFIDENT {
+                    let label = format!("{n} of {confident} confidently classified files in this folder are {path}");
+                    todo.push((i, crate::classifier::Hint { category_id: id.clone(), points, label }));
+                }
+            }
+        }
+    }
+    let redone: Vec<(usize, Classification)> =
+        todo.par_iter().map(|(i, h)| (*i, input(&items[*i], std::slice::from_ref(h)))).collect();
+    for (i, c) in redone {
+        out[i] = Some(c);
+    }
+    out
 }
 
 /// Folder names that are containers of packs rather than packs.
@@ -86,7 +181,7 @@ const CONTAINER_NAMES: &[&str] = &[
 /// correct this in the Review screen.
 pub fn detect_source_pack(folders: &[String]) -> String {
     let norm = |s: &str| crate::classifier::tokenize::fine_tokens(s).join(" ");
-    for f in folders.iter().take(folders.len().saturating_sub(0)) {
+    for f in folders {
         if !CONTAINER_NAMES.contains(&norm(f).as_str()) {
             return f.clone();
         }
@@ -156,6 +251,7 @@ pub fn build_rows(
             bpm: c.bpm,
             bpm_source: c.bpm_source,
             key: c.key,
+            key_source: c.key_source,
             method: c.method,
             audio: a.audio,
             manual_override: false,
@@ -173,19 +269,28 @@ pub fn build_rows(
     Ok(rows)
 }
 
-/// Re-run classification for stored rows (after config changes). Manual
-/// overrides are preserved by the database update.
+/// Re-run classification for stored rows (after config changes or new
+/// learned rules). Manual overrides are kept, and act as sibling context.
 pub fn reclassify(rows: &[SampleRow], classifier: &Classifier) -> Vec<SampleRow> {
-    rows.par_iter()
-        .filter(|r| !r.manual_override && r.status == SampleStatus::Pending)
-        .map(|r| {
-            let folders: Vec<String> = r.relative_dir.split('/').filter(|s| !s.is_empty()).map(String::from).collect();
-            let c = classifier.classify(&ClassifyInput {
-                file_name: &r.original_filename,
-                folders: &folders,
-                kind: r.file_kind,
-                audio: r.audio.as_ref(),
-            });
+    let folders: Vec<Vec<String>> =
+        rows.iter().map(|r| r.relative_dir.split('/').filter(|s| !s.is_empty()).map(String::from).collect()).collect();
+    let items: Vec<BatchItem> = rows
+        .iter()
+        .zip(&folders)
+        .map(|(r, f)| BatchItem {
+            file_name: &r.original_filename,
+            folders: f,
+            kind: r.file_kind,
+            audio: r.audio.as_ref(),
+            group: &r.original_dir,
+            fixed: (r.manual_override || r.status != SampleStatus::Pending).then_some((r.category_id.as_str(), r.category_path.as_str())),
+        })
+        .collect();
+    let classes = classify_batch(&items, classifier);
+    rows.iter()
+        .zip(classes)
+        .filter_map(|(r, c)| {
+            let c = c?;
             let mut n = r.clone();
             n.category_id = c.category_id;
             n.category_path = c.category_path;
@@ -196,8 +301,9 @@ pub fn reclassify(rows: &[SampleRow], classifier: &Classifier) -> Vec<SampleRow>
             n.bpm = c.bpm;
             n.bpm_source = c.bpm_source;
             n.key = c.key;
+            n.key_source = c.key_source;
             n.method = c.method;
-            n
+            Some(n)
         })
         .collect()
 }
@@ -213,5 +319,63 @@ mod tests {
         assert_eq!(detect_source_pack(&v(&["Sample Packs", "Kompany Kit", "Drums"])), "Kompany Kit");
         assert_eq!(detect_source_pack(&v(&["Downloads", "Splice", "BOS Tearout"])), "BOS Tearout");
         assert_eq!(detect_source_pack(&v(&["Samples"])), "Samples");
+    }
+}
+
+#[cfg(test)]
+mod sibling_tests {
+    use super::*;
+    use crate::config::{default_config, CompiledConfig};
+
+    #[test]
+    fn siblings_rescue_vague_names() {
+        let c = Classifier::new(CompiledConfig::compile(&default_config()).unwrap());
+        let folders = vec!["Pack".to_string(), "Stuff".to_string()];
+        let names = ["Kick_01.wav", "Kick_02.wav", "Kick_Hard.wav", "XLNT_07.wav"];
+        let items: Vec<BatchItem> = names
+            .iter()
+            .map(|n| BatchItem { file_name: n, folders: &folders, kind: FileKind::Audio, audio: None, group: "g", fixed: None })
+            .collect();
+        let out = classify_batch(&items, &c);
+        let vague = out[3].as_ref().unwrap();
+        assert_eq!(vague.category_path, "Kicks", "{:#?}", vague.evidence);
+        assert!(vague.method.contains("siblings"));
+        // Without siblings it would have been uncategorised.
+        let alone = classify_batch(&items[3..], &c);
+        assert_eq!(alone[0].as_ref().unwrap().category_path, "Uncategorised");
+    }
+
+    #[test]
+    fn mixed_folders_give_no_hint() {
+        let c = Classifier::new(CompiledConfig::compile(&default_config()).unwrap());
+        let folders = vec!["Pack".to_string(), "Stuff".to_string()];
+        let names = ["Kick_01.wav", "Snare_01.wav", "Clap_01.wav", "XLNT_07.wav"];
+        let items: Vec<BatchItem> = names
+            .iter()
+            .map(|n| BatchItem { file_name: n, folders: &folders, kind: FileKind::Audio, audio: None, group: "g", fixed: None })
+            .collect();
+        let out = classify_batch(&items, &c);
+        assert_eq!(out[3].as_ref().unwrap().category_path, "Uncategorised");
+    }
+
+    #[test]
+    fn manual_corrections_count_as_context() {
+        let c = Classifier::new(CompiledConfig::compile(&default_config()).unwrap());
+        let folders = vec!["Pack".to_string(), "Shots".to_string()];
+        let names = ["XLNT_01.wav", "XLNT_02.wav", "XLNT_03.wav"];
+        let items: Vec<BatchItem> = names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| BatchItem {
+                file_name: n,
+                folders: &folders,
+                kind: FileKind::Audio,
+                audio: None,
+                group: "g",
+                fixed: (i < 2).then_some(("bass/bass-stabs", "Bass/Bass Stabs")),
+            })
+            .collect();
+        let out = classify_batch(&items, &c);
+        assert_eq!(out[2].as_ref().unwrap().category_path, "Bass/Bass Stabs");
     }
 }

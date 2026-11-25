@@ -9,7 +9,7 @@
 
 use crate::state::AppState;
 use kit_core::audio::AudioMeta;
-use kit_core::classifier::{Classification, Classifier, ClassifyInput};
+use kit_core::classifier::{learned, Classification, ClassifyInput};
 use kit_core::config::{default_config, CategoryConfig, CompiledConfig};
 use kit_core::db::{now, DashboardStats, ImportSummary, OperationRow, SamplePage, SampleQuery};
 use kit_core::error::CoreError;
@@ -53,8 +53,7 @@ fn apply_config(state: &AppState, cfg: &CategoryConfig) -> CoreResult<()> {
         // Keep stored paths of pending samples in sync with renames.
         db.refresh_category_paths(&paths)?;
     }
-    state.set_classifier(Classifier::new(compiled));
-    Ok(())
+    state.rebuild_classifier()
 }
 
 #[derive(Deserialize)]
@@ -233,7 +232,8 @@ pub fn start_scan(
             if rep.unsupported > 0 {
                 messages.push(format!("{} unsupported file(s) were left untouched", rep.unsupported));
             }
-            let analysed = pipeline::analyse(rep.files, &classifier, settings.threads(), &cancel, &emit)?;
+            let opts = pipeline::AnalyseOptions { threads: settings.threads(), analyse_audio: settings.analyse_audio };
+            let analysed = pipeline::analyse(rep.files, &classifier, &opts, &cancel, &emit)?;
             let rows = {
                 let db = state.db();
                 pipeline::build_rows(&job, analysed, &db, settings.duplicate_handling)?
@@ -291,12 +291,110 @@ pub fn import_summary(state: State<AppState>, import_id: String) -> CmdResult<Im
     state.db().import_summary(&import_id, t).map_err(err)
 }
 
+fn folders_of(r: &SampleRow) -> Vec<String> {
+    r.relative_dir.split('/').filter(|s| !s.is_empty()).map(String::from).collect()
+}
+
+/// Manually reassign samples. When learning is on, each correction is
+/// remembered as a pattern rule and applied to future classifications.
 #[tauri::command]
 pub fn reassign_samples(state: State<AppState>, ids: Vec<String>, category_id: String) -> CmdResult<usize> {
     let c = state.classifier();
     let idx = c.config().by_id.get(&category_id).ok_or("unknown category")?;
     let path = c.config().path_of(*idx).to_string();
-    state.db().reassign(&ids, &category_id, &path).map_err(err)
+    let n = state.db().reassign(&ids, &category_id, &path).map_err(err)?;
+    if state.db().settings().map_err(err)?.learn_from_corrections {
+        let mut learned = false;
+        for id in &ids {
+            let Some(row) = state.db().get_sample(id).map_err(err)? else { continue };
+            if let Some(p) = learned::pattern_of(c.config(), &row.original_filename, &folders_of(&row)) {
+                state.db().upsert_learned(&p, &category_id, &row.original_filename).map_err(err)?;
+                learned = true;
+            }
+        }
+        if learned {
+            state.rebuild_classifier().map_err(err)?;
+        }
+    }
+    Ok(n)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Similar {
+    ids: Vec<String>,
+    description: String,
+    category_id: String,
+    category_path: String,
+}
+
+/// Pending files in the same import that share a name pattern with the
+/// just-corrected `ids` but are in a different category.
+#[tauri::command]
+pub fn similar_samples(state: State<AppState>, ids: Vec<String>) -> CmdResult<Option<Similar>> {
+    let c = state.classifier();
+    let db = state.db();
+    let mut patterns = Vec::new();
+    let mut target: Option<(String, String, String)> = None;
+    for id in &ids {
+        let Some(r) = db.get_sample(id).map_err(err)? else { continue };
+        if let Some(p) = learned::pattern_of(c.config(), &r.original_filename, &folders_of(&r)) {
+            target.get_or_insert((r.import_id.clone(), r.category_id.clone(), r.category_path.clone()));
+            patterns.push((p, r.original_dir.clone()));
+        }
+    }
+    let Some((import_id, category_id, category_path)) = target else { return Ok(None) };
+    let chosen: std::collections::HashSet<&String> = ids.iter().collect();
+    let rows = db.samples_for_import(&import_id).map_err(err)?;
+    let matches: Vec<String> = rows
+        .iter()
+        .filter(|r| r.status == SampleStatus::Pending && !r.manual_override && !chosen.contains(&r.id) && r.category_id != category_id)
+        .filter(|r| {
+            learned::pattern_of(c.config(), &r.original_filename, &folders_of(r)).is_some_and(|p| {
+                patterns.iter().any(|(q, dir)| *q == p && (p.kind == learned::RuleKind::Name || *dir == r.original_dir))
+            })
+        })
+        .map(|r| r.id.clone())
+        .collect();
+    if matches.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(Similar { ids: matches, description: patterns[0].0.display(), category_id, category_path }))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LearnedRuleView {
+    #[serde(flatten)]
+    rule: learned::LearnedRule,
+    category_path: Option<String>,
+    description: String,
+}
+
+#[tauri::command]
+pub fn list_learned_rules(state: State<AppState>) -> CmdResult<Vec<LearnedRuleView>> {
+    let c = state.classifier();
+    let rules = state.db().learned_rules().map_err(err)?;
+    Ok(rules
+        .into_iter()
+        .map(|r| {
+            let path = c.config().by_id.get(&r.category_id).map(|&i| c.config().path_of(i).to_string());
+            let description = learned::Pattern { kind: r.kind, tokens: r.tokens.clone(), scope: r.scope.clone() }.display();
+            LearnedRuleView { rule: r, category_path: path, description }
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub fn delete_learned_rule(state: State<AppState>, id: i64) -> CmdResult<()> {
+    state.db().delete_learned(id).map_err(err)?;
+    state.rebuild_classifier().map_err(err)
+}
+
+#[tauri::command]
+pub fn clear_learned_rules(state: State<AppState>) -> CmdResult<()> {
+    state.db().clear_learned().map_err(err)?;
+    state.rebuild_classifier().map_err(err)
 }
 
 #[tauri::command]
@@ -342,7 +440,7 @@ pub fn classify_preview(state: State<AppState>, relative_path: String) -> CmdRes
         kit_core::filetypes::FileKind::Unsupported | kit_core::filetypes::FileKind::Ignored => kit_core::filetypes::FileKind::Audio,
         k => k,
     };
-    Ok(state.classifier().classify(&ClassifyInput { file_name: file, folders: &folders, kind, audio: None }))
+    Ok(state.classifier().classify(&ClassifyInput { file_name: file, folders: &folders, kind, audio: None, hints: &[] }))
 }
 
 // ---------------- organising ----------------

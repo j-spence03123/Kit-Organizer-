@@ -54,8 +54,9 @@ fn parse_note(s: &str) -> Option<(String, &str)> {
 
 fn quality(s: &str) -> Option<&'static str> {
     match s {
-        "m" | "min" | "minor" | "Min" | "Minor" | "MIN" | "mi" => Some("m"),
-        "maj" | "major" | "Maj" | "Major" | "MAJ" | "M" | "ma" => Some(""),
+        "m" | "min" | "minor" | "Min" | "Minor" | "MIN" => Some("m"),
+        // A lone "M" is not accepted: "FM" means FM synthesis far more often than F major.
+        "maj" | "major" | "Maj" | "Major" | "MAJ" => Some(""),
         _ => None,
     }
 }
@@ -110,6 +111,20 @@ pub fn key_from_name(stem: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// Normalise a key from a metadata tag ("A minor", "F#m", "Ebmaj", "C").
+pub fn normalise_key(s: &str) -> Option<String> {
+    let toks = coarse_tokens(s);
+    let first = toks.first()?;
+    let (note, rest) = parse_note(first)?;
+    let q = if rest.is_empty() { toks.get(1).and_then(|t| quality(t)).unwrap_or("") } else { quality(rest)? };
+    Some(format!("{note}{q}"))
+}
+
+/// Note name for a MIDI note number (60 → "C").
+pub fn note_name(midi: u32) -> &'static str {
+    ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"][(midi % 12) as usize]
 }
 
 /// A single token like `F#m`, `Ebmin`, `Cmaj`, or a note with octave `C4`.
@@ -169,6 +184,16 @@ mod tests {
         assert_eq!(key_from_name("Kick_01"), None);
         assert_eq!(key_from_name("Big Room Drop"), None);
         assert_eq!(key_from_name("A Kick 01"), None);
+    }
+
+    #[test]
+    fn tag_keys() {
+        assert_eq!(normalise_key("A minor").as_deref(), Some("Am"));
+        assert_eq!(normalise_key("F#m").as_deref(), Some("F#m"));
+        assert_eq!(normalise_key("Ebmaj").as_deref(), Some("Eb"));
+        assert_eq!(normalise_key("C").as_deref(), Some("C"));
+        assert_eq!(normalise_key("unknown"), None);
+        assert_eq!(note_name(61), "C#");
     }
 
     #[test]

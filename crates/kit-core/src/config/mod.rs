@@ -92,6 +92,39 @@ pub struct ClassifierWeights {
     /// sample goes to Uncategorised.
     #[serde(default = "default_min_score")]
     pub min_score: f32,
+    /// Points for a keyword in embedded tags (title/genre/comment).
+    #[serde(default = "d_metadata")]
+    pub metadata: f32,
+    /// Multiplier for typo-tolerant (fuzzy) filename matches.
+    #[serde(default = "d_fuzzy")]
+    pub fuzzy_factor: f32,
+    /// Points for an exact match of a rule learned from your corrections
+    /// in the same pack/vendor (60% elsewhere, half for partial matches).
+    #[serde(default = "d_learned")]
+    pub learned: f32,
+    /// Points from sibling files: multiplied by the share of confident
+    /// files in the same folder that agree.
+    #[serde(default = "d_sibling")]
+    pub sibling: f32,
+    /// Multiplier for audio-analysis evidence (0 disables it).
+    #[serde(default = "d_audio")]
+    pub audio: f32,
+}
+
+fn d_metadata() -> f32 {
+    1.5
+}
+fn d_fuzzy() -> f32 {
+    0.6
+}
+fn d_learned() -> f32 {
+    4.0
+}
+fn d_sibling() -> f32 {
+    2.5
+}
+fn d_audio() -> f32 {
+    1.0
 }
 
 fn default_min_score() -> f32 {
@@ -114,6 +147,11 @@ impl Default for ClassifierWeights {
             saturation: 2.0,
             loop_threshold: 2.0,
             min_score: default_min_score(),
+            metadata: d_metadata(),
+            fuzzy_factor: d_fuzzy(),
+            learned: d_learned(),
+            sibling: d_sibling(),
+            audio: d_audio(),
         }
     }
 }
@@ -135,6 +173,20 @@ pub struct CategoryConfig {
     pub midi_category: String,
     pub preset_category: String,
     pub uncategorised_category: String,
+    /// Known vendor/label prefixes ignored when matching filenames
+    /// (`XLNT_`, `BOS_`). Unknown ALL-CAPS prefixes are detected too.
+    #[serde(default = "default_vendor_prefixes")]
+    pub vendor_prefixes: Vec<String>,
+}
+
+pub fn default_vendor_prefixes() -> Vec<String> {
+    [
+        "xlnt", "bos", "kshmr", "splice", "cymatics", "ghosthack", "loopmasters", "vengeance", "vec", "sm", "sm101",
+        "ph", "pml", "ss", "ue", "oc", "ppr", "lm", "zen", "rv", "dlb", "kompany", "subtronics", "wvwd", "ww",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect()
 }
 
 /// Flattened, index-based view of a category for fast lookups.
@@ -165,6 +217,9 @@ pub struct AliasHit {
     pub weak: bool,
     /// Weak only because it is a very short single token (not marked `~`).
     pub auto_weak: bool,
+    /// Context words, one of which must appear somewhere in the filename,
+    /// folders or tags (`roll@snare|drum`).
+    pub requires: Vec<String>,
     pub tokens: usize,
     pub alias: String,
 }
@@ -184,6 +239,12 @@ pub struct CompiledConfig {
     pub midi: usize,
     pub preset: usize,
     pub uncategorised: usize,
+    /// Every word used by any alias or term (for compound splitting and
+    /// vendor-prefix detection).
+    pub vocab: HashSet<String>,
+    /// Single-word aliases of 4+ letters (typo-tolerant matching).
+    pub fuzzy_aliases: Vec<String>,
+    pub vendor_prefixes: HashSet<String>,
 }
 
 /// Normalise text into the keys used by the alias table: lowercase tokens
@@ -273,6 +334,13 @@ impl CompiledConfig {
                     Some(rest) => (true, rest),
                     None => (false, raw.as_str()),
                 };
+                let (text, requires) = match text.split_once('@') {
+                    Some((a, req)) => (
+                        a,
+                        req.split('|').map(|r| normalise_phrase(r).join(" ")).filter(|r| !r.is_empty()).collect::<Vec<_>>(),
+                    ),
+                    None => (text, Vec::new()),
+                };
                 let toks = normalise_phrase(text);
                 if toks.is_empty() {
                     continue;
@@ -280,7 +348,7 @@ impl CompiledConfig {
                 let auto_weak = !weak_marked && toks.len() == 1 && toks[0].chars().count() <= 2;
                 let weak = weak_marked || auto_weak;
                 max_phrase = max_phrase.max(toks.len());
-                let hit = AliasHit { node: idx, weak, auto_weak, tokens: toks.len(), alias: text.trim().to_string() };
+                let hit = AliasHit { node: idx, weak, auto_weak, requires, tokens: toks.len(), alias: text.trim().to_string() };
                 let spaced = toks.join(" ");
                 push_unique(&mut aliases, spaced, hit.clone());
                 if toks.len() > 1 {
@@ -315,6 +383,19 @@ impl CompiledConfig {
         };
         let generic_folders =
             cfg.generic_folder_terms.iter().map(|t| normalise_phrase(t).join(" ")).filter(|s| !s.is_empty()).collect();
+        let mut vocab: HashSet<String> = HashSet::new();
+        for key in aliases.keys() {
+            vocab.extend(key.split(' ').map(String::from));
+        }
+        for t in cfg.loop_terms.iter().chain(&cfg.one_shot_terms) {
+            vocab.extend(normalise_phrase(t));
+        }
+        let mut fuzzy_aliases: Vec<String> = aliases
+            .keys()
+            .filter(|k| !k.contains(' ') && k.chars().count() >= 4 && k.chars().all(char::is_alphabetic))
+            .cloned()
+            .collect();
+        fuzzy_aliases.sort();
 
         Ok(Self {
             midi: resolve(&cfg.midi_category, "MIDI category")?,
@@ -323,6 +404,9 @@ impl CompiledConfig {
             loop_terms: term_map(&cfg.loop_terms),
             one_shot_terms: term_map(&cfg.one_shot_terms),
             generic_folders,
+            vocab,
+            fuzzy_aliases,
+            vendor_prefixes: cfg.vendor_prefixes.iter().map(|v| v.to_lowercase()).collect(),
             source: cfg.clone(),
             nodes,
             by_id,

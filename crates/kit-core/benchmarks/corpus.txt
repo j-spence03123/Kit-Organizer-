@@ -1,0 +1,285 @@
+# Kit Organizer classification benchmark
+# Format: Expected Category | Pack Folder/Sub Folders/File name
+# Names are synthetic but follow the conventions of real vendors. Only
+# names are needed. Add your own lines (or a separate file) and run:
+#   cargo run -p kit-core --example benchmark -- benchmarks/corpus.txt
+
+# ---------- XLNT-style riddim / dubstep ----------
+Kicks | XLNT Riddim Vol 1/DRUMS/ONE SHOTS/KICKS/XLNT_Kick_01.wav
+Kicks | XLNT Riddim Vol 1/DRUMS/ONE SHOTS/KICKS/XLNT_Kick_02.wav
+Kicks | XLNT Riddim Vol 1/DRUMS/ONE SHOTS/KICKS/XLNT_Kick_Hard_03.wav
+Snares | XLNT Riddim Vol 1/DRUMS/ONE SHOTS/SNARES/XLNT_Snare_01.wav
+Snares | XLNT Riddim Vol 1/DRUMS/ONE SHOTS/SNARES/XLNT_Snare_Layered_02.wav
+Claps | XLNT Riddim Vol 1/DRUMS/ONE SHOTS/CLAPS/XLNT_Clap_01.wav
+Hi-Hats/Closed Hats | XLNT Riddim Vol 1/DRUMS/ONE SHOTS/HATS/XLNT_CHH_01.wav
+Hi-Hats/Open Hats | XLNT Riddim Vol 1/DRUMS/ONE SHOTS/HATS/XLNT_OHH_01.wav
+Cymbals/Crashes | XLNT Riddim Vol 1/DRUMS/ONE SHOTS/CYMBALS/XLNT_Crash_01.wav
+Percussion/Other Percussion | XLNT Riddim Vol 1/DRUMS/ONE SHOTS/PERCS/XLNT_Perc_04.wav
+Bass/Growls | XLNT Riddim Vol 1/BASS/XLNT_Growl_F.wav
+Bass/Growls | XLNT Riddim Vol 1/BASS/XLNT_Growl_G#.wav
+Bass/Screeches | XLNT Riddim Vol 1/BASS/XLNT_Screech_03_F.wav
+Bass/Yoinks | XLNT Riddim Vol 1/BASS/XLNT_Yoink_01_G.wav
+Bass/Riddim Basses | XLNT Riddim Vol 1/BASS/XLNT_Riddim_Bass_07_F.wav
+Bass/Gunshots | XLNT Riddim Vol 1/BASS/XLNT_Gunshot_Bass_02.wav
+Bass/Donks | XLNT Riddim Vol 1/BASS/XLNT_Donk_04_A.wav
+Bass/Wubs | XLNT Riddim Vol 1/BASS/XLNT_Wub_02_F.wav
+Bass/Other Basses | XLNT Riddim Vol 1/BASS/XLNT_Bass_12_F.wav
+Bass/Bass Loops | XLNT Riddim Vol 1/BASS LOOPS/XLNT_Bass_Loop_150BPM_F.wav
+Bass/Bass Loops | XLNT Riddim Vol 1/BASS LOOPS/XLNT_Bass_Loop_02_150BPM.wav
+Drum Loops/Full Loops | XLNT Riddim Vol 1/DRUM LOOPS/XLNT_Drum_Loop_150BPM_01.wav
+Drum Loops/Top Loops | XLNT Riddim Vol 1/DRUM LOOPS/XLNT_Top_Loop_150BPM_02.wav
+FX/Risers | XLNT Riddim Vol 1/FX/XLNT_Riser_01.wav
+FX/Impacts | XLNT Riddim Vol 1/FX/XLNT_Impact_02.wav
+FX/Downlifters | XLNT Riddim Vol 1/FX/XLNT_Downlifter_01.wav
+Vocals/Vocal Chops | XLNT Riddim Vol 1/VOCALS/XLNT_Vocal_Chop_04.wav
+Vocals/Vocal One-Shots | XLNT Riddim Vol 1/VOCALS/XLNT_Vox_Shot_02.wav
+
+# ---------- Kompany-style tearout ----------
+Bass/Wubs | Kompany Tearout Kit/Bass/Kompany_Bass_Wub_01.wav
+Bass/Metallic Basses | Kompany Tearout Kit/Bass/Kompany_Metallic_Bass_03.wav
+Bass/Reeses | Kompany Tearout Kit/Bass/Kompany_Reese_A.wav
+Bass/Wobbles | Kompany Tearout Kit/Bass/Kompany_Wobble_Bass_150.wav
+Bass/FM Basses | Kompany Tearout Kit/Bass/Kompany_FM_Bass_09.wav
+Bass/Glitch Basses | Kompany Tearout Kit/Bass/Kompany_Glitch_Bass_02.wav
+Bass/Growls | Kompany Tearout Kit/Bass/Kompany_Growl_Heavy_F.wav
+Bass/Neuros | Kompany Tearout Kit/Bass/Kompany_Neuro_Bass_05.wav
+Bass/Sustains | Kompany Tearout Kit/Bass/Kompany_Sustain_Bass_F.wav
+Bass/Bass Stabs | Kompany Tearout Kit/Bass/Kompany_Bass_Stab_04.wav
+Kicks | Kompany Tearout Kit/Drums/Kicks/Kompany_Kick_Tearout_01.wav
+Snares | Kompany Tearout Kit/Drums/Snares/Kompany_Snare_Crack_02.wav
+FX/Impacts | Kompany Tearout Kit/FX/Kompany_Impact_Drop_01.wav
+FX/Risers | Kompany Tearout Kit/FX/Kompany_Uplifter_8bars.wav
+Vocals/Chants | Kompany Tearout Kit/Vocals/Kompany_Chant_Hey.wav
+
+# ---------- Black Octopus style ----------
+Bass/Bass Loops | BOS Tearout Essentials/Loops/BOS_TT_Bass_Loop_140_Fmin.wav
+Kicks | BOS Tearout Essentials/Drums/BOS_TT_Kick_01.wav
+Snares | BOS Tearout Essentials/Drums/BOS_TT_Snare_03.wav
+Drum Loops/Top Loops | BOS Tearout Essentials/Drum Loops/BOS_TT_Top_Loop_140.wav
+Drum Loops/Full Loops | BOS Tearout Essentials/Drum Loops/BOS_TT_Drum_Loop_140_Full.wav
+FX/Risers | BOS Tearout Essentials/FX/BOS_TT_Riser_04.wav
+Vocals/Vocal Chops | BOS Tearout Essentials/Vocals/BOS_TT_Vocal_Chop_Fm_01.wav
+Melodic Loops/Synth Loops | BOS Tearout Essentials/Loops/BOS_TT_Synth_Loop_140_Am.wav
+Melodic Loops/Pad Loops | BOS Tearout Essentials/Loops/BOS_TT_Pad_Loop_140_Cmin.wav
+Bass/Reeses | BOS Neuro DnB/Bass/BOS_ND_Reese_Bass_F#.wav
+Drum Loops/Breakbeats | BOS Neuro DnB/Breaks/BOS_ND_Break_174_Amen_Chop.wav
+Bass/Neuros | BOS Neuro DnB/Bass/BOS_ND_Neuro_Bass_Loop_Shot_04.wav
+
+# ---------- Trap / hip-hop drum kits ----------
+Bass/808s | Trap Kit Vol 3/808s/808 - Long Boom (C).wav
+Bass/808s | Trap Kit Vol 3/808s/808_Distorted_F#.wav
+Bass/808s | Trap Kit Vol 3/808s/Hard 808 03.wav
+Kicks | Trap Kit Vol 3/Kicks/Kick - Thump.wav
+Kicks | Trap Kit Vol 3/Kicks/BD_01.wav
+Snares | Trap Kit Vol 3/Snares/Snare - Crispy.wav
+Snares | Trap Kit Vol 3/Snares/SD_Tight.wav
+Claps | Trap Kit Vol 3/Claps/Clap - Wide.wav
+Claps | Trap Kit Vol 3/Claps/CLP_1.wav
+Hi-Hats | Trap Kit Vol 3/Hi Hats/Hat 2.wav
+Hi-Hats/Closed Hats | Trap Kit Vol 3/Hi Hats/Closed Hat 3.wav
+Hi-Hats/Open Hats | Trap Kit Vol 3/Open Hats/OH 05.wav
+Hi-Hats/Open Hats | Trap Kit Vol 3/Open Hats/Open Hat - Sizzle.wav
+Percussion/Other Percussion | Trap Kit Vol 3/Percs/Perc - Knock.wav
+Rims | Trap Kit Vol 3/Rims/Rimshot 2.wav
+Snaps | Trap Kit Vol 3/Snaps/Snap - Finger.wav
+Vocals/Ad-libs | Trap Kit Vol 3/Vox/Adlib - Yeah.wav
+Vocals/Ad-libs | Trap Kit Vol 3/Vox/Ad Lib Skrrt.wav
+FX/Other FX | Trap Kit Vol 3/FX/Siren Loud.wav
+FX/Other FX | Trap Kit Vol 3/FX/Tape Stop.wav
+Drum Loops/Hi-Hat Loops | Trap Kit Vol 3/Loops/Hat Loop 140 BPM.wav
+Melodic Loops/Full Melody Loops | Trap Kit Vol 3/Melodies/Dark Melody 140 BPM Am.wav
+Melodic Loops/Piano Loops | Trap Kit Vol 3/Melodies/Piano Loop 70 BPM.wav
+Melodic Loops/Bell Loops | Trap Kit Vol 3/Melodies/Bell Loop 140bpm.wav
+
+# ---------- House / techno ----------
+Kicks | Deep House Essentials/Drums/Kicks/House_Kick_01.wav
+Drum Loops/Kick Loops | Deep House Essentials/Drum Loops/House_Kick_Loop_124BPM.wav
+Drum Loops/Top Loops | Deep House Essentials/Drum Loops/House_Top_Loop_124BPM_01.wav
+Drum Loops/Percussion Loops | Deep House Essentials/Drum Loops/House_Perc_Loop_124BPM.wav
+Drum Loops/Hi-Hat Loops | Deep House Essentials/Drum Loops/House_Hat_Loop_124.wav
+Drum Loops/Full Loops | Deep House Essentials/Drum Loops/House_Full_Drum_Loop_124.wav
+Percussion/Shakers | Deep House Essentials/Percussion/Shaker_01.wav
+Percussion/Congas | Deep House Essentials/Percussion/Conga_Hi.wav
+Percussion/Bongos | Deep House Essentials/Percussion/Bongo_Lo.wav
+Percussion/Tambourines | Deep House Essentials/Percussion/Tamb_Hit_02.wav
+Percussion/Cowbells | Deep House Essentials/Percussion/Cowbell_808.wav
+One-Shots/Chords | Deep House Essentials/Chords/House_Chord_Stab_Cm.wav
+One-Shots/Keys/Organs | Deep House Essentials/Keys/Organ_Bass_Hit_C.wav
+Melodic Loops/Chord Loops | Deep House Essentials/Music Loops/House_Chord_Loop_124_Am.wav
+Melodic Loops/Piano Loops | Deep House Essentials/Music Loops/House_Piano_Loop_124_Gm.wav
+Bass/Bass Loops | Deep House Essentials/Bass Loops/House_Bassline_124_Am.wav
+Vocals/Vocal Loops | Deep House Essentials/Vocals/House_Vox_Loop_124_Am.wav
+Vocals/Vocal Phrases | Deep House Essentials/Vocals/Vocal_Phrase_Feel_It.wav
+Kicks | Techno Warehouse/Kicks/TW_Kick_Rumble_03.wav
+Kicks | Techno Warehouse/Kicks/909 Kick Saturated.wav
+Hi-Hats/Closed Hats | Techno Warehouse/Hats/TW_ClosedHat_04.wav
+Hi-Hats/Open Hats | Techno Warehouse/Hats/TW_OpenHat_02.wav
+Cymbals/Rides | Techno Warehouse/Cymbals/TW_Ride_01.wav
+Claps | Techno Warehouse/Claps/909 Clap Reverb.wav
+FX/Atmospheres | Techno Warehouse/Atmos/TW_Atmos_Dark_01.wav
+FX/Drones | Techno Warehouse/Atmos/TW_Drone_Low_C.wav
+FX/Textures | Techno Warehouse/Textures/TW_Texture_Metal_02.wav
+FX/Noise FX | Techno Warehouse/FX/TW_Noise_Burst_01.wav
+Drum Loops/Full Loops | Techno Warehouse/Loops/TW_Drum_Loop_130_01.wav
+Bass/Bass Loops | Techno Warehouse/Loops/TW_Bass_Loop_130_F.wav
+Melodic Loops/Synth Loops | Techno Warehouse/Loops/TW_Synth_Loop_130_Am.wav
+
+# ---------- Drum & bass ----------
+Drum Loops/Breakbeats | DnB Breaks Vol 2/Breaks/Amen_Break_170bpm.wav
+Drum Loops/Breakbeats | DnB Breaks Vol 2/Breaks/Think_Break_Chopped_174.wav
+Drum Loops/Breakbeats | DnB Breaks Vol 2/Breaks/Break_03_172bpm.wav
+Bass/Reeses | DnB Breaks Vol 2/Bass/Reese_Wide_F.wav
+Bass/Subs | DnB Breaks Vol 2/Bass/Sub_Bass_F.wav
+Bass/Neuros | DnB Breaks Vol 2/Bass/Neuro_Bass_Loop_174_Shot.wav
+Drum Loops/Drum Fills | DnB Breaks Vol 2/Fills/Snare_Roll_174.wav
+Drum Loops/Drum Fills | DnB Breaks Vol 2/Fills/Drum_Fill_174_02.wav
+Melodic Loops/Pad Loops | DnB Breaks Vol 2/Music/Pad_Loop_174_Dm.wav
+Melodic Loops/String Loops | DnB Breaks Vol 2/Music/Strings_Loop_174_Am.wav
+Vocals/Vocal Loops | DnB Breaks Vol 2/Vocals/Vocal_Loop_174_Gm.wav
+FX/Sweeps | DnB Breaks Vol 2/FX/White_Noise_Sweep_Up.wav
+FX/Reverse FX | DnB Breaks Vol 2/FX/Reverse_FX_01.wav
+Cymbals/Reverse Cymbals | DnB Breaks Vol 2/FX/Reverse_Crash_02.wav
+
+# ---------- Melodic one-shots ----------
+One-Shots/Keys/Pianos | Melodic Essentials/Keys/Piano_C4.wav
+One-Shots/Keys/Pianos | Melodic Essentials/Keys/Grand Piano Chord Am.wav
+One-Shots/Keys/Electric Pianos | Melodic Essentials/Keys/Rhodes_C3.wav
+One-Shots/Keys/Electric Pianos | Melodic Essentials/Keys/EPiano_Soft_F.wav
+One-Shots/Keys/Organs | Melodic Essentials/Keys/Hammond_Organ_C.wav
+One-Shots/Plucks | Melodic Essentials/Plucks/Pluck_Bright_C.wav
+One-Shots/Plucks | Melodic Essentials/Plucks/Guitar_Pluck_C3.wav
+One-Shots/Leads | Melodic Essentials/Leads/Lead_Saw_F.wav
+One-Shots/Leads | Melodic Essentials/Leads/Supersaw_Lead_G.wav
+One-Shots/Pads | Melodic Essentials/Pads/Pad_Warm_C.wav
+One-Shots/Pads | Melodic Essentials/Pads/Dark_Pad_Fm.wav
+One-Shots/Synths | Melodic Essentials/Synths/Synth_Hit_A.wav
+One-Shots/Bells | Melodic Essentials/Bells/Bell_Hit_G.wav
+One-Shots/Bells | Melodic Essentials/Bells/Glockenspiel_C5.wav
+One-Shots/Mallets | Melodic Essentials/Mallets/Marimba_C4.wav
+One-Shots/Strings | Melodic Essentials/Strings/Strings_Long_D.wav
+One-Shots/Strings | Melodic Essentials/Strings/Violin_Pizz_A.wav
+One-Shots/Brass | Melodic Essentials/Brass/Trumpet_Stab_C.wav
+One-Shots/Brass | Melodic Essentials/Brass/Horns_Section_F.wav
+One-Shots/Woodwinds | Melodic Essentials/Woodwinds/Flute_Breathy_G.wav
+One-Shots/Guitars | Melodic Essentials/Guitars/Acoustic_Guitar_Strum_C.wav
+One-Shots/Arps | Melodic Essentials/Arps/Arp_Pattern_Cm.wav
+One-Shots/Chords | Melodic Essentials/Chords/Rhodes_Chord_Cm.wav
+One-Shots/Chords | Melodic Essentials/Chords/Chord_Stack_Fmaj.wav
+One-Shots/Stabs | Melodic Essentials/Stabs/Orch_Hit_C.wav
+Melodic Loops/Arpeggio Loops | Melodic Essentials/Loops/Arp_Loop_128bpm_Am.wav
+Melodic Loops/Guitar Loops | Melodic Essentials/Loops/Guitar_Loop_90_Em.wav
+Melodic Loops/Pluck Loops | Melodic Essentials/Loops/Pluck_Loop_128_Fm.wav
+Melodic Loops/Lead Loops | Melodic Essentials/Loops/Lead_Loop_128_Am.wav
+Melodic Loops/Piano Loops | Melodic Essentials/Loops/Piano_Melody_140BPM.wav
+Melodic Loops/Brass Loops | Melodic Essentials/Loops/Brass_Loop_100_Bb.wav
+Melodic Loops/Woodwind Loops | Melodic Essentials/Loops/Flute_Loop_90_Dm.wav
+Melodic Loops/Orchestral Loops | Melodic Essentials/Loops/Orchestral_Loop_120_Cm.wav
+
+# ---------- Vocals ----------
+Vocals/Acapellas | Vocal Pack/Acapellas/Acapella_Female_Am_128.wav
+Vocals/Choirs | Vocal Pack/Choir/Choir_Ahh_C.wav
+Vocals/Harmonies | Vocal Pack/Harmonies/Harmony_Stack_Am.wav
+Vocals/Spoken Word | Vocal Pack/Spoken/Spoken_Word_Intro.wav
+Vocals/Rap Vocals | Vocal Pack/Rap/Rap_Verse_90bpm.wav
+Vocals/Vocal FX | Vocal Pack/FX/Vocal_FX_Riser.wav
+Vocals/Vocal FX | Vocal Pack/FX/Vocoder_Phrase_Robot.wav
+Vocals/Vocal Chops | Vocal Pack/Chops/Vox_Chop_03_Fm.wav
+Vocals/Vocal One-Shots | Vocal Pack/One Shots/Vocal_Shot_Hey.wav
+Vocals/Other Vocals | Vocal Pack/Misc/Vocal_Breath_02.wav
+Vocals/Vocal Phrases | Vocal Pack/Phrases/Vocal Hook - Take Me Higher.wav
+
+# ---------- FX ----------
+FX/Risers | FX Toolkit/Risers/Riser_8bar_128bpm.wav
+FX/Risers | FX Toolkit/Risers/Noise_Riser_04.wav
+FX/Downlifters | FX Toolkit/Downlifters/Downlifter_01.wav
+FX/Downlifters | FX Toolkit/Downlifters/Faller_Deep.wav
+FX/Impacts | FX Toolkit/Impacts/Impact_Big.wav
+FX/Impacts | FX Toolkit/Impacts/Sub_Drop_01.wav
+FX/Impacts | FX Toolkit/Impacts/Boom_Cinematic_02.wav
+FX/Sweeps | FX Toolkit/Sweeps/Filter_Sweep_Down.wav
+FX/Transitions | FX Toolkit/Transitions/Whoosh_Fast_01.wav
+FX/Transitions | FX Toolkit/Transitions/Transition_FX_03.wav
+FX/Reverse FX | FX Toolkit/Reverse/Reversed_Pad_Swell.wav
+FX/Glitches | FX Toolkit/Glitch/Glitch_FX_09.wav
+FX/Stutters | FX Toolkit/Glitch/Stutter_Vocal_FX.wav
+FX/Noise FX | FX Toolkit/Noise/Vinyl_Crackle_Loop.wav
+FX/Atmospheres | FX Toolkit/Atmos/Atmosphere_Rain.wav
+FX/Foley FX | FX Toolkit/Foley/Foley_Door_Slam.wav
+FX/Cinematic FX | FX Toolkit/Cinematic/Braam_Huge.wav
+FX/Other FX | FX Toolkit/Misc/Laser_Zap_01.wav
+FX/Other FX | FX Toolkit/Misc/Weird_Thing_01.wav
+Cymbals/Reverse Cymbals | FX Toolkit/Reverse/Reverse Crash.wav
+
+# ---------- Percussion ----------
+Percussion/Woodblocks | World Perc/Woodblock_01.wav
+Percussion/Claves | World Perc/Claves_Hit.wav
+Percussion/Maracas | World Perc/Maracas_Shake_02.wav
+Percussion/Guiros | World Perc/Guiro_Scrape.wav
+Percussion/Agogos | World Perc/Agogo_Hi.wav
+Percussion/Timpani | World Perc/Timpani_Roll_C.wav
+Percussion/Hand Drums | World Perc/Djembe_Slap_03.wav
+Percussion/Hand Drums | World Perc/Tabla_Na.wav
+Percussion/Hand Drums | World Perc/Cajon_Bass.wav
+Percussion/Foley Percussion | World Perc/Foley_Perc_Keys.wav
+Percussion/Electronic Percussion | World Perc/Synth_Perc_Blip_04.wav
+Percussion/Other Percussion | World Perc/Triangle_Hit.wav
+Toms | Drum Kit Acoustic/Toms/Floor_Tom_01.wav
+Toms | Drum Kit Acoustic/Toms/Rack Tom Hi.wav
+Drum Loops/Tom Loops | Drum Kit Acoustic/Loops/Tom_Loop_120.wav
+Cymbals/Splashes | Drum Kit Acoustic/Cymbals/Splash_10in.wav
+Cymbals/Chinas | Drum Kit Acoustic/Cymbals/China_18.wav
+Cymbals/Rides | Drum Kit Acoustic/Cymbals/Ride_Bell_02.wav
+Hi-Hats/Pedal Hats | Drum Kit Acoustic/Hats/Pedal_Hat_01.wav
+Drum Loops/Cymbal Loops | Drum Kit Acoustic/Loops/Ride_Loop_120.wav
+
+# ---------- Messy real-world naming ----------
+Kicks | Producer Pack/KICK-01.WAV
+Kicks | Producer Pack/kick01.wav
+Kicks | Producer Pack/kik_punchy.wav
+Hi-Hats/Closed Hats | Producer Pack/ClosedHat_04.wav
+Hi-Hats/Open Hats | Producer Pack/Hi-Hat Open 2.wav
+Hi-Hats/Closed Hats | Producer Pack/HiHat_Closed_9.wav
+Hi-Hats/Open Hats | Producer Pack/open_hihat (wet).wav
+Hi-Hats/Closed Hats | Producer Pack/CHH_03.wav
+Cymbals/Crashes | Producer Pack/Crsh_2.wav
+Snares | Producer Pack/snr_layer_7.wav
+Bass/Growls | Producer Pack/growlbass_04.wav
+Bass/Screeches | Producer Pack/screechbass_02.wav
+Snares | Producer Pack/Snere_Tight_01.wav
+Drum Loops/Percussion Loops | Producer Pack/Shakker_Loop_Thing.wav
+Bass/Screeches | Producer Pack/Bass/Screetch_05.wav
+Vocals/Vocal Chops | Producer Pack/vocalchop_hey_02.wav
+Drum Loops/Kick Loops | Producer Pack/Drum Loops/Kick_Groove_120bpm.wav
+Drum Loops/Hi-Hat Loops | Producer Pack/Loops/Hats/Hat_Groove_01.wav
+
+# ---------- Sibling context: vague names in clear folders ----------
+Kicks | Mystery Kit/Kicks/Kick_01.wav
+Kicks | Mystery Kit/Kicks/Kick_02.wav
+Kicks | Mystery Kit/Kicks/Kick_Deep.wav
+Kicks | Mystery Kit/Kicks/MK_09.wav
+Kicks | Mystery Kit/Stuff/Kick_A.wav
+Kicks | Mystery Kit/Stuff/Kick_B.wav
+Kicks | Mystery Kit/Stuff/Kick_C.wav
+Kicks | Mystery Kit/Stuff/Thing_04.wav
+Snares | Mystery Kit/Batch 2/Snare_01.wav
+Snares | Mystery Kit/Batch 2/Snare_02.wav
+Snares | Mystery Kit/Batch 2/Snare_03.wav
+Snares | Mystery Kit/Batch 2/Sample_17.wav
+
+# ---------- Conflicts and ambiguity ----------
+Snares | Conflict Pack/Kicks/Snare_07.wav
+Bass/Growls | Conflict Pack/Bass/XLNT_Neuro_Growl_F.wav
+Kicks | Bass Pack/Kick_01.wav
+Bass/Bass Guitars | Conflict Pack/Bass/Bass_Guitar_Slap_E.wav
+Kicks | Conflict Pack/Drums/Bass_Drum_01.wav
+Bass/808s | Conflict Pack/808/808_Kick_Long_C.wav
+Uncategorised | Conflict Pack/Samples/Audio/Misc/Thing_01.wav
+Uncategorised | Conflict Pack/Abduction_Wisdom.wav
+Uncategorised | XLNT Riddim Vol 1/Misc/Thing_01.wav
+Uncategorised | Conflict Pack/Roll_Thing.wav
+
+# ---------- File types ----------
+MIDI | Producer Pack/MIDI/Chords_Am.mid
+MIDI | Producer Pack/MIDI/Melody_140_Fm.midi
+Presets | Producer Pack/Serum Presets/BASS - Growl.fxp
+Presets | Producer Pack/Vital Presets/LD Supersaw.vital

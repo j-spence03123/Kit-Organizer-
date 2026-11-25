@@ -10,6 +10,7 @@ import type {
   PlanPreview,
   SampleRow,
   ScanProgress,
+  SimilarSamples,
   Settings,
 } from "../types";
 
@@ -26,6 +27,8 @@ export const settings: Settings = {
   preview: { volume: 0.8, autoplay: false, loopPlayback: false },
   appearance: { accent: "amber", compactRows: false },
   workerThreads: 0,
+  analyseAudio: false,
+  learnFromCorrections: true,
 };
 
 const node = (id: string, name: string, children: CategoryConfig["categories"] = []) => ({ id, name, aliases: [name.toLowerCase()], priority: 0, kind: "any" as const, children });
@@ -44,6 +47,7 @@ export const config: CategoryConfig = {
   weights: {
     filename: 3, phraseBonus: 0.5, folderNear: 2, folderDecay: 0.75, rootFolderFactor: 0.4, parentFactor: 0.6,
     weakFactor: 0.5, ancestorSupport: 0.5, headNounBonus: 0.3, priorityStep: 0.25, saturation: 2, loopThreshold: 2,
+    minScore: 0.75, metadata: 1.5, fuzzyFactor: 0.6, learned: 4, sibling: 2.5, audio: 1,
   },
   genericFolderTerms: ["samples"],
   loopTerms: ["loop"],
@@ -51,13 +55,14 @@ export const config: CategoryConfig = {
   midiCategory: "midi",
   presetCategory: "presets",
   uncategorisedCategory: "uncategorised",
+  vendorPrefixes: ["xlnt"],
 };
 
 function row(id: string, name: string, cat: string, conf: number): SampleRow {
   return {
     id, importId: "imp1", originalPath: `/packs/XLNT/${name}`, originalFilename: name, originalDir: "/packs/XLNT", relativeDir: "XLNT",
     sourcePack: "XLNT", size: 1000, hash: `h-${id}`, fileKind: "audio", categoryId: cat.toLowerCase(), categoryPath: cat, confidence: conf,
-    evidence: [`Filename contains "${name}" → ${cat} (+3.00)`], alternatives: [], sampleType: "one-shot", bpm: null, bpmSource: null, key: null,
+    evidence: [`Filename contains "${name}" → ${cat} (+3.00)`], alternatives: [], sampleType: "one-shot", bpm: null, bpmSource: null, key: null, keySource: null,
     method: "filename", audio: null, manualOverride: false, reviewed: false, status: "pending", duplicateOf: null, duplicatePath: null,
     dupDecision: null, destinationPath: null, error: null, createdAt: "", updatedAt: "",
   };
@@ -130,6 +135,13 @@ export function createBackend() {
       samples = samples.map((s) => (ids.includes(s.id) ? { ...s, categoryId, categoryPath: categoryId === "kicks" ? "Kicks" : categoryId, manualOverride: true, reviewed: true } : s));
       return ids.length;
     },
+    similarSamples: async (ids: string[]): Promise<SimilarSamples | null> => {
+      log("similarSamples", ids);
+      return null;
+    },
+    listLearnedRules: async () => [],
+    deleteLearnedRule: async () => undefined,
+    clearLearnedRules: async () => undefined,
     markReviewed: async (ids: string[]) => {
       samples = samples.map((s) => (ids.includes(s.id) ? { ...s, reviewed: true } : s));
       return ids.length;

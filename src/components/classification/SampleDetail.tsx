@@ -7,6 +7,29 @@ import { Badge, Button, inputClass } from "../ui";
 import { CategoryPicker } from "./CategoryPicker";
 import { StatusBadge } from "./status";
 
+/** Embedded tags and signal-analysis measurements, when available. */
+function AudioInsights({ audio }: { audio: SampleRow["audio"] }) {
+  if (!audio) return null;
+  const tags = [audio.title && `Title: ${audio.title}`, audio.genre && `Genre: ${audio.genre}`, audio.comment && `Comment: ${audio.comment}`].filter(Boolean) as string[];
+  const f = audio.features;
+  if (tags.length === 0 && !f) return null;
+  return (
+    <div className="grid gap-1 text-[11px] text-muted" data-selectable>
+      {tags.map((t) => (
+        <div key={t} className="truncate" title={t}>{t}</div>
+      ))}
+      {f && (
+        <div title="Simple signal measurements used as supporting evidence — not sound recognition.">
+          Analysis: {Math.round(f.lowRatio * 100)}% low end · {f.onsets} hit{f.onsets === 1 ? "" : "s"}
+          {f.decayMs != null ? ` · decays in ${(f.decayMs / 1000).toFixed(2)}s` : " · sustained"}
+          {f.periodicity > 0.45 ? " · rhythmic" : ""}
+          {f.riseDb > 12 ? ` · rising +${Math.round(f.riseDb)} dB` : ""}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface Props {
   row: SampleRow;
   threshold: number;
@@ -30,8 +53,10 @@ export function SampleDetail({ row, threshold, editable, onReassign, onAccept, o
         bpm={row.bpm}
         bpmSource={row.bpmSource}
         musicalKey={row.key}
+        keySource={row.keySource}
         playable={row.fileKind === "audio"}
       />
+      <AudioInsights audio={row.audio} />
 
       <section className="grid gap-2 border-t border-line pt-3">
         <div className="flex items-center justify-between">

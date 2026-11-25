@@ -18,6 +18,10 @@
 //! | Duration ≥ 4 s                               | +0.5   |
 //! | Duration < 1.5 s                             | −1.0   |
 //! | Note + octave in name (`C4`)                 | −0.5   |
+//! | Loop / one-shot term in embedded tags        | ±1.5   |
+//! | BPM stored in embedded tags                  | +1.0   |
+//! | Audio analysis: regular rhythmic pattern     | +1.5   |
+//! | Audio analysis: single decaying hit          | −1.0   |
 
 use super::tokenize::singular;
 use crate::audio::AudioMeta;
@@ -36,6 +40,8 @@ pub struct LoopDecision {
 
 pub struct LoopInput<'a> {
     pub name_tokens: &'a [String],
+    /// Words from embedded tags.
+    pub meta_tokens: &'a [String],
     /// (tokens, distance from file: 1 = parent, is_import_root)
     pub folders: &'a [(Vec<String>, usize, bool)],
     pub bpm_in_name: bool,
@@ -78,6 +84,12 @@ pub fn detect(cfg: &CompiledConfig, input: &LoopInput) -> LoopDecision {
     if let Some(t) = find_term(input.name_tokens, &cfg.one_shot_terms) {
         add(-3.0, format!("Filename contains one-shot term \"{t}\""), &mut ev);
     }
+    if let Some(t) = find_term(input.meta_tokens, &cfg.loop_terms) {
+        add(1.5, format!("Embedded tags contain loop term \"{t}\""), &mut ev);
+    }
+    if let Some(t) = find_term(input.meta_tokens, &cfg.one_shot_terms) {
+        add(-1.5, format!("Embedded tags contain one-shot term \"{t}\""), &mut ev);
+    }
     // Strongest folder signal of each type only, so "Loops/Loops" does not
     // double-count.
     let mut best_loop: Option<(f32, String)> = None;
@@ -114,6 +126,16 @@ pub fn detect(cfg: &CompiledConfig, input: &LoopInput) -> LoopDecision {
             (Some(true), _) => add(-2.0, "ACID metadata marks a one-shot".into(), &mut ev),
             (Some(false), Some(t)) if t > 0.0 => add(2.0, format!("ACID metadata marks a loop at {t:.0} BPM"), &mut ev),
             _ => {}
+        }
+        if a.tag_bpm.is_some() && !input.bpm_in_name {
+            add(1.0, "BPM stored in embedded tags".into(), &mut ev);
+        }
+        if let Some(f) = a.features.as_ref().filter(|_| w.audio > 0.0) {
+            if f.analysed_secs >= 2.0 && f.onsets >= 4 && f.periodicity > 0.45 {
+                add(1.5 * w.audio, format!("Audio analysis: regular rhythmic pattern ({} hits)", f.onsets), &mut ev);
+            } else if f.onsets <= 1 && f.decay_ms.is_some() && f.analysed_secs < 3.0 {
+                add(-w.audio, "Audio analysis: single hit that decays".into(), &mut ev);
+            }
         }
         if a.smpl_loop_count.unwrap_or(0) > 0 {
             add(0.5, "Sampler loop points present".into(), &mut ev);

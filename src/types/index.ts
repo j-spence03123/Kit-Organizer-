@@ -37,6 +37,8 @@ export interface Settings {
   preview: { volume: number; autoplay: boolean; loopPlayback: boolean };
   appearance: { accent: string; compactRows: boolean };
   workerThreads: number;
+  analyseAudio: boolean;
+  learnFromCorrections: boolean;
 }
 
 export interface CategoryNode {
@@ -63,6 +65,12 @@ export interface ClassifierWeights {
   priorityStep: number;
   saturation: number;
   loopThreshold: number;
+  minScore: number;
+  metadata: number;
+  fuzzyFactor: number;
+  learned: number;
+  sibling: number;
+  audio: number;
 }
 
 export interface CategoryConfig {
@@ -76,6 +84,7 @@ export interface CategoryConfig {
   midiCategory: string;
   presetCategory: string;
   uncategorisedCategory: string;
+  vendorPrefixes: string[];
 }
 
 export interface AudioMeta {
@@ -87,7 +96,27 @@ export interface AudioMeta {
   acidOneShot: boolean | null;
   acidTempo: number | null;
   smplLoopCount: number | null;
+  rootNote: number | null;
+  title: string | null;
+  genre: string | null;
+  comment: string | null;
+  tagBpm: number | null;
+  tagKey: string | null;
+  features: AudioFeatures | null;
   error: string | null;
+}
+
+export interface AudioFeatures {
+  analysedSecs: number;
+  lowRatio: number;
+  highRatio: number;
+  zcr: number;
+  attackMs: number;
+  decayMs: number | null;
+  onsets: number;
+  periodicity: number;
+  riseDb: number;
+  tailSilent: boolean;
 }
 
 export interface Alternative {
@@ -107,6 +136,7 @@ export interface Classification {
   bpm: number | null;
   bpmSource: string | null;
   key: string | null;
+  keySource: string | null;
   method: string;
 }
 
@@ -130,6 +160,7 @@ export interface SampleRow {
   bpm: number | null;
   bpmSource: string | null;
   key: string | null;
+  keySource: string | null;
   method: string;
   audio: AudioMeta | null;
   manualOverride: boolean;
@@ -326,6 +357,26 @@ export interface ExportedConfig {
   formatVersion: number;
   categories: CategoryConfig;
   settings?: Settings;
+}
+
+export interface LearnedRule {
+  id: number;
+  kind: "name" | "folder";
+  tokens: string[];
+  scope: string | null;
+  categoryId: string;
+  categoryPath: string | null;
+  example: string;
+  hits: number;
+  createdAt: string;
+  description: string;
+}
+
+export interface SimilarSamples {
+  ids: string[];
+  description: string;
+  categoryId: string;
+  categoryPath: string;
 }
 
 export interface CategoryRemap {

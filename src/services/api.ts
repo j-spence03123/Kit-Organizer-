@@ -15,6 +15,8 @@ import type {
   ImportRecord,
   ImportStats,
   ImportSummary,
+  LearnedRule,
+  SimilarSamples,
   OpMode,
   OperationRow,
   OrganiseProgress,
@@ -47,6 +49,10 @@ export const api = {
   importSummary: (importId: string) => invoke<ImportSummary>("import_summary", { importId }),
   reassignSamples: (ids: string[], categoryId: string) =>
     invoke<number>("reassign_samples", { ids, categoryId }),
+  similarSamples: (ids: string[]) => invoke<SimilarSamples | null>("similar_samples", { ids }),
+  listLearnedRules: () => invoke<LearnedRule[]>("list_learned_rules"),
+  deleteLearnedRule: (id: number) => invoke<void>("delete_learned_rule", { id }),
+  clearLearnedRules: () => invoke<void>("clear_learned_rules"),
   markReviewed: (ids: string[], reviewed: boolean) => invoke<number>("mark_reviewed", { ids, reviewed }),
   setDuplicateDecision: (ids: string[], decision: DupDecision | null) =>
     invoke<number>("set_duplicate_decision", { ids, decision }),

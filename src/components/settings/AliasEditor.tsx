@@ -15,7 +15,7 @@ export function AliasEditor({ aliases, onChange, conflicts }: { aliases: string[
     if (parts.length) onChange([...aliases, ...parts]);
     setText("");
   };
-  const keyOf = (a: string) => a.replace(/^~/, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const keyOf = (a: string) => a.replace(/^~/, "").split("@")[0]!.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   return (
     <div className="grid gap-2">
       <div className="flex flex-wrap gap-1.5">
@@ -38,7 +38,8 @@ export function AliasEditor({ aliases, onChange, conflicts }: { aliases: string[
               >
                 ~
               </button>
-              {a.replace(/^~/, "")}
+              {a.replace(/^~/, "").split("@")[0]}
+              {a.includes("@") && <span className="text-[10px] text-faint" title="Only matches when one of these words is also present">needs {a.split("@")[1]?.split("|").join("/")}</span>}
               <button type="button" aria-label={`Remove alias ${a}`} className="text-faint hover:text-bad" onClick={() => onChange(aliases.filter((_, j) => j !== i))}>
                 <X size={11} />
               </button>

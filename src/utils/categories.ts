@@ -95,7 +95,7 @@ export function aliasConflicts(config: CategoryConfig): Map<string, string[]> {
   const seen = new Map<string, string[]>();
   for (const c of flatten(config.categories)) {
     for (const a of c.node.aliases) {
-      const key = a.replace(/^~/, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const key = a.replace(/^~/, "").split("@")[0]!.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
       if (!key) continue;
       seen.set(key, [...(seen.get(key) ?? []), c.path]);
     }

@@ -1,8 +1,9 @@
-import { ArrowDown, ArrowUp, Download, FlaskConical, FolderPlus, GitMerge, Plus, RotateCcw, Save, SlidersHorizontal, Trash2, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, Brain, Download, FlaskConical, FolderPlus, GitMerge, Plus, RotateCcw, Save, SlidersHorizontal, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../components/layout/PageHeader";
 import { AliasEditor } from "../components/settings/AliasEditor";
 import { CategoryTree } from "../components/settings/CategoryTree";
+import { LearnedPanel } from "../components/settings/LearnedPanel";
 import { RulesPanel } from "../components/settings/RulesPanel";
 import { Badge, Button, EmptyState, Field, Modal, inputClass } from "../components/ui";
 import { useApp } from "../hooks/useApp";
@@ -36,6 +37,7 @@ export default function Categories() {
   const [mergeTarget, setMergeTarget] = useState("");
   const [nameDraft, setNameDraft] = useState("");
   const [showRules, setShowRules] = useState(false);
+  const [showLearned, setShowLearned] = useState(false);
   const [testPath, setTestPath] = useState("XLNT Pack/Bass/XLNT_Neuro_Growl_F.wav");
   const [testResult, setTestResult] = useState<Classification | null>(null);
   const [saving, setSaving] = useState(false);
@@ -246,20 +248,26 @@ export default function Categories() {
       />
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-72 shrink-0 flex-col border-r border-line bg-panel">
-          <div className="flex items-center justify-between border-b border-line px-3 py-2">
-            <span className="text-xs text-muted">{flat.length} categories</span>
+          <div className="flex items-center justify-end border-b border-line px-2 py-2">
             <div className="flex gap-1">
-              <Button size="sm" variant="ghost" icon={<SlidersHorizontal size={13} />} onClick={() => { setShowRules(true); setSelected(null); }}>Rules</Button>
+              <Button size="sm" variant="ghost" icon={<SlidersHorizontal size={13} />} onClick={() => { setShowRules(true); setShowLearned(false); setSelected(null); }}>Rules</Button>
+              <Button size="sm" variant="ghost" icon={<Brain size={13} />} onClick={() => { setShowLearned(true); setShowRules(false); setSelected(null); }}>Learned</Button>
               <Button size="sm" variant="ghost" icon={<Plus size={13} />} onClick={() => addCategory(null)}>Add</Button>
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-auto p-2">
-            <CategoryTree nodes={draft.categories} selected={selected} onSelect={(id) => { setSelected(id); setShowRules(false); }} usage={usage} />
+            <CategoryTree nodes={draft.categories} selected={selected} onSelect={(id) => { setSelected(id); setShowRules(false); setShowLearned(false); }} usage={usage} />
           </div>
+          <div className="border-t border-line px-3 py-2 text-[11px] text-faint">{flat.length} categories</div>
         </aside>
 
         <div className="min-w-0 flex-1 overflow-auto px-6 py-5">
-          {showRules && !node ? (
+          {showLearned && !node ? (
+            <div className="mx-auto max-w-2xl">
+              <h2 className="mb-4 text-sm font-semibold">Learned from your corrections</h2>
+              <LearnedPanel />
+            </div>
+          ) : showRules && !node ? (
             <div className="mx-auto max-w-2xl">
               <h2 className="mb-4 text-sm font-semibold">Classification rules</h2>
               <RulesPanel draft={draft} onChange={setDraft} />
@@ -287,7 +295,7 @@ export default function Categories() {
                 <input className={inputClass} value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} onBlur={rename} onKeyDown={(e) => e.key === "Enter" && rename()} aria-label="Category name" />
               </Field>
 
-              <Field label="Aliases" hint="Matched as whole words, ignoring case and punctuation (hi-hat = hihat = HiHat). Multi-word phrases beat single words. ~ marks weak evidence.">
+              <Field label="Aliases" hint="Matched as whole words, ignoring case and punctuation (hi-hat = hihat = HiHat). Multi-word phrases beat single words. ~ marks weak evidence. Add @word1|word2 to require context (roll@snare|drum).">
                 <AliasEditor aliases={node.aliases} onChange={(a) => editNode((n) => (n.aliases = a))} conflicts={conflicts} />
               </Field>
 
@@ -322,7 +330,7 @@ export default function Categories() {
             </div>
           ) : (
             <EmptyState icon={<SlidersHorizontal size={18} />} title="Select a category to edit">
-              Or open <strong>Rules</strong> to tune scoring weights and loop/one-shot indicators.
+              Or open <strong>Rules</strong> to tune scoring weights, or <strong>Learned</strong> to see what Kit Organizer has learned from your corrections.
             </EmptyState>
           )}
 

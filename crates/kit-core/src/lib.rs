@@ -10,6 +10,7 @@
 //! [`classifier::EvidenceSource`] without touching the UI.
 
 pub mod audio;
+pub mod benchmark;
 pub mod classifier;
 pub mod config;
 pub mod db;

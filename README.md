@@ -18,12 +18,15 @@ Some Pack/Melodic/Piano_Melody_140BPM.wav                 →  Organised Samples
 ## Features
 
 - **Drag and drop import.** Add one or many pack folders, scan them recursively (any depth) and cancel at any time.
-- **Rule-based classifier** that uses folder context, filenames, loop/one-shot detection and audio metadata. Every result comes with a confidence score, the evidence behind it and alternative categories.
+- **Rule-based classifier** that uses folder context, filenames, embedded tags, loop/one-shot detection and (optionally) simple audio analysis. Every result comes with a confidence score, the evidence behind it and alternative categories.
+- **Learns from your corrections.** Reassign `XLNT_Shot_03.wav` once and every file named like it, in this import or future ones, follows. Kit Organizer also offers to fix the matching files immediately.
+- **Uses the other files in each folder.** A vaguely named file among confidently classified kicks is treated as a kick.
+- **Tolerates messy names:** typos (`Snere`), run-together words (`growlbass`), vendor prefixes (`XLNT_`, `BOS_TT_`) and context-dependent words (`roll` counts as a drum fill only next to a drum word).
 - **Preview before anything changes.** Every proposed destination appears in a searchable, sortable review table. Files below your confidence threshold are flagged for review.
 - **Manual corrections.** Reassign files one at a time or in bulk, accept predictions, fix the source-pack name, and filter by confidence, category or duplicate status.
 - **Safe copy (default) or move.** Copies are verified against a hash before they get their final name. Files are never overwritten (`Kick 01 (2).wav`). Move mode needs explicit confirmation, and an original is only removed after its copy is verified.
 - **Duplicate detection** with BLAKE3 content hashes, both within an import and against your existing library. You choose to skip, keep, or be asked. Files that share a name but have different content are never treated as duplicates.
-- **Audio preview** for WAV, MP3, AIFF, FLAC and OGG, with a waveform, seeking and looping. Shows duration, sample rate, channels and bit depth. BPM and key appear only when stated in the filename or the WAV ACID metadata; otherwise they show as *Unknown*.
+- **Audio preview** for WAV, MP3, AIFF, FLAC and OGG, with a waveform, seeking and looping. Shows duration, sample rate, channels and bit depth. BPM and key appear only when stated in the filename, embedded tags or WAV metadata (ACID tempo, sampler root note), always with their source; otherwise they show as *Unknown*.
 - **Library browser** with a folder tree, search and preview.
 - **History with safe undo.** Undo deletes only files that are still unmodified, and restores moved files only where the original location is free.
 - **Crash recovery.** Every file operation is written to a journal first, so an interrupted run is reconciled on the next launch.
@@ -46,7 +49,7 @@ Other files are counted and listed but never copied, moved or deleted. OS clutte
 ### Prerequisites (all platforms)
 
 - **Node.js 20+** and npm
-- **Rust** (stable, 1.82+) via [rustup](https://rustup.rs)
+- **Rust** (stable, 1.87+) via [rustup](https://rustup.rs)
 
 ### Windows
 
@@ -91,9 +94,42 @@ Unsigned builds work locally. To distribute them, set up code signing (Authentic
 ### Tests
 
 ```bash
-cargo test --workspace   # classifier, scanner, organiser, undo, recovery, audio, DB
+cargo test --workspace   # classifier, scanner, organiser, undo, recovery, audio, DB, accuracy benchmark
 npm test                 # UI workflow and helper tests (Vitest + Testing Library)
 npm run typecheck
+```
+
+### Accuracy benchmark
+
+`crates/kit-core/benchmarks/corpus.txt` holds 252 labelled sample paths in many vendor naming styles (XLNT, Kompany, Black Octopus, trap kits, house, techno, DnB, messy real-world names, ambiguous cases). Run it with:
+
+```bash
+cargo run -p kit-core --example benchmark
+```
+
+The report shows overall accuracy, how many correct answers were flagged for review, **silent mistakes** (wrong answers above the confidence threshold, the worst kind), recall per category, the most common confusions and every miss. The test suite fails if accuracy drops below 96% or any silent mistake appears.
+
+| Version | Accuracy | Silent mistakes |
+|---|---|---|
+| Initial rules | 93.7% | 1 |
+| + typo/compound/vendor/context matching, sibling context | 96.8% | 0 |
+
+The remaining misses are genuinely ambiguous names (e.g. `Organ_Bass_Hit`, `House_Chord_Stab`) and are all flagged for review. This corpus contains names only, so the gains from learned rules, embedded tags and audio analysis are covered by their own tests rather than by this number.
+
+**Test it on your own library.** Export your file list, label the lines with the category you'd expect, and run the benchmark on it. This is the most useful way to find what to improve.
+
+```powershell
+# Windows PowerShell: list every audio file under D:\Samples, relative to it
+Get-ChildItem "D:\Samples" -Recurse -Include *.wav,*.mp3,*.aif,*.aiff,*.flac,*.ogg |
+  ForEach-Object { "? | " + $_.FullName.Substring("D:\Samples\".Length) } > my-library.txt
+```
+
+Replace each `?` with the expected category path, e.g. `Bass/Growls | My Pack/Bass/Growl_01.wav`. Then run:
+
+```bash
+cargo run -p kit-core --example benchmark -- my-library.txt
+# include your saved categories and learned rules:
+cargo run -p kit-core --example benchmark -- my-library.txt --db "%APPDATA%/app.kitorganizer.desktop/kit-organizer.db"
 ```
 
 None of the tests need commercial sample packs. Filesystem tests generate their files in temporary directories, and the audio tests synthesise WAVs.
@@ -158,16 +194,21 @@ Classification runs in stages. Each stage adds evidence, and the scores are comb
 1. **File type.** MIDI and preset files are placed by extension with certainty. Only audio continues to the next stages.
 2. **Tokenising.** Names are split on separators, camelCase and letter/digit boundaries (`ClosedHat-03` → `closed hat 03`, `128bpm` → `128 bpm`). Matching is always whole-token, so `bd` never matches inside `Abduction`.
 3. **Phrase matching.** The longest phrase wins: `reverse crash` (→ Cymbals/Reverse Cymbals) beats `reverse` + `crash`. Each window is also tried concatenated (`hi hat` = `hihat`) and in singular form (`kicks` → `kick`). Aliases of two characters or fewer, and aliases marked `~`, are *weak* and count half.
-4. **Evidence sources.** Filename matches score 3.0, plus 0.5 per extra word. Folder matches score 2.0 for the parent folder, decaying ×0.75 per level up. The imported pack folder counts ×0.4, and broad parent categories count ×0.6. Generic folders (`Samples`, `One Shots`, `Misc`, …) are ignored.
-5. **Loop vs one-shot.** Indicators add up: `loop` in the name (+3), a loops folder (+2), a stated BPM (+1.5), an ACID loop tag (+2), long duration (+0.5), one-shot terms (−3), short duration (−1), note + octave like `C4` (−0.5). The sample is a loop at a score of 2.0 or more. A BPM tag or a long duration alone is never enough. For loops, evidence is routed through each category's *loop target* (Kicks → Drum Loops/Kick Loops) before scoring, so loop folders support instrument loops instead of competing with them.
-6. **Scoring.** For each category, `total = best filename evidence + best folder evidence + 0.5 × ancestor evidence + 0.25 × priority`. When several unrelated categories appear in a filename, the last strong keyword gets a +0.3 *head-noun* bonus (*Neuro Growl* → Growls, with Neuros listed as an alternative). If the best total is below 0.75, the evidence is too weak and the file goes to Uncategorised. Parent categories with no subcategory evidence go to their default subcategory (Bass → Bass/Other Basses).
-7. **Confidence.** `strength = 1 − e^(−S1/2)`, `margin = 1 − 0.5 × S2/S1` (S2 is the best *conflicting* candidate), `confidence = strength × margin`, then ×0.9 when the loop/one-shot decision was borderline and changed the destination. This measures how strong and consistent the rule evidence is. It is **not** a calibrated probability.
+4. **Smarter matching.** Leading vendor prefixes (`XLNT_`, `BOS_TT_`, or any unknown ALL-CAPS word that isn't a keyword) are ignored. Run-together words are split into known keywords (`growlbass` → `growl bass`). Aliases can require context: `roll@snare|drum` matches only when a drum word also appears in the filename, folders or tags. If nothing in the filename matches exactly, a misspelt word may match the closest keyword (one edit for 5–7 letters, two for 8+, same first letter) at ×0.6.
+5. **Evidence sources.** Filename matches score 3.0, plus 0.5 per extra word. Folder matches score 2.0 for the parent folder, decaying ×0.75 per level up. The imported pack folder counts ×0.4, and broad parent categories count ×0.6. Generic folders (`Samples`, `One Shots`, `Misc`, …) are ignored. Further sources:
+   - **Embedded tags** (WAV INFO, MP3 ID3, FLAC/OGG Vorbis comments): title, genre and comment keywords score 1.5. A title that just repeats the filename is ignored.
+   - **Learned rules:** a file matching the name pattern of one of your corrections scores 4.0 in the same vendor or pack, 2.4 elsewhere, and half that for partial matches.
+   - **Siblings:** in folders of 3+ files where at least two confident files (≥70%, or your manual choices) agree and make up 60%+ of the confident ones, every low-confidence file gets 2.5 × that share.
+   - **Audio analysis** (optional, on by default): up to 10 seconds of each file are decoded to measure low-end energy, brightness (zero-crossing rate), attack, decay, number of hits, rhythmic regularity and level trend. These measurements suggest kicks, sustained bass, hi-hats, cymbals, risers and drum loops (about 1.0–1.2 points). Audio evidence is used **only when it agrees with the names, or when there is nothing else to go on**, so it can never override a clearly named file. This is simple signal measurement, not sound recognition: it cannot tell a snare from a clap.
+6. **Loop vs one-shot.** Indicators add up: `loop` in the name (+3), a loops folder (+2), a stated BPM (+1.5), an ACID loop tag (+2), long duration (+0.5), one-shot terms (−3), short duration (−1), note + octave like `C4` (−0.5), loop/one-shot words in tags (±1.5), a BPM tag (+1), and from audio analysis a regular rhythm (+1.5) or a single decaying hit (−1). The sample is a loop at a score of 2.0 or more. A BPM tag or a long duration alone is never enough. For loops, evidence is routed through each category's *loop target* (Kicks → Drum Loops/Kick Loops) before scoring, so loop folders support instrument loops instead of competing with them.
+7. **Scoring.** For each category, `total = sum over evidence types of the best item of that type + 0.5 × ancestor evidence + 0.25 × priority`. When several unrelated categories appear in a filename, the last strong keyword gets a +0.3 *head-noun* bonus (*Neuro Growl* → Growls, with Neuros listed as an alternative). If the best total is below 0.75, the evidence is too weak and the file goes to Uncategorised. Parent categories with no subcategory evidence go to their default subcategory (Bass → Bass/Other Basses).
+8. **Confidence.** `strength = 1 − e^(−S1/2)`, `margin = 1 − 0.5 × S2/S1` (S2 is the best *conflicting* candidate), `confidence = strength × margin`, then ×0.9 when the loop/one-shot decision was borderline and changed the destination. This measures how strong and consistent the rule evidence is. It is **not** a calibrated probability.
 
 Every weight can be changed under **Categories → Rules**.
 
 ### Adding AI audio classification later
 
-The classifier collects evidence from a list of `EvidenceSource` implementations (`crates/kit-core/src/classifier/mod.rs`). An audio model only needs to implement that trait and return scored evidence for category IDs with `Origin::Model`. It then joins the existing scoring, confidence and evidence trail without any changes to the UI or the organiser. The current version analyses names, folders and metadata only. It does not claim to recognise sounds from the audio itself.
+The classifier collects evidence from a list of `EvidenceSource` implementations (`crates/kit-core/src/classifier/mod.rs`). An audio model only needs to implement that trait and return scored evidence for category IDs with `Origin::Model`. It then joins the existing scoring, confidence and evidence trail without any changes to the UI or the organiser. The current version analyses names, folders, tags and a few simple signal measurements. It does not claim to recognise sounds.
 
 ### Data locations
 

@@ -6,9 +6,11 @@
 //! chunk (loop/one-shot flag and tempo, written by many sample vendors) and
 //! the `smpl` chunk (sampler loop points).
 
+pub mod analysis;
 mod decode;
 mod riff;
 
+pub use analysis::{analyse_file, AudioFeatures};
 pub use decode::{decode_to_wav, peaks};
 
 use serde::{Deserialize, Serialize};
@@ -20,7 +22,7 @@ use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct AudioMeta {
     pub duration_secs: Option<f64>,
     pub sample_rate: Option<u32>,
@@ -32,6 +34,17 @@ pub struct AudioMeta {
     pub acid_tempo: Option<f32>,
     /// Number of sampler loops in the WAV `smpl` chunk.
     pub smpl_loop_count: Option<u32>,
+    /// MIDI unity note from the WAV `smpl` chunk (60 = C4, also the common
+    /// default, so it is only shown when it differs from 60).
+    pub root_note: Option<u32>,
+    /// Embedded tags (WAV INFO, ID3, Vorbis comments).
+    pub title: Option<String>,
+    pub genre: Option<String>,
+    pub comment: Option<String>,
+    pub tag_bpm: Option<f32>,
+    pub tag_key: Option<String>,
+    /// Signal analysis, present when audio analysis is enabled.
+    pub features: Option<AudioFeatures>,
     /// Set when the header could not be read; the file is still organised.
     pub error: Option<String>,
 }
@@ -46,6 +59,7 @@ pub fn probe(path: &Path) -> AudioMeta {
             meta.acid_one_shot = r.acid_one_shot;
             meta.acid_tempo = r.acid_tempo;
             meta.smpl_loop_count = r.smpl_loops;
+            meta.root_note = r.root_note;
         }
     }
     match probe_symphonia(path, &ext, &mut meta) {
@@ -63,6 +77,13 @@ fn probe_symphonia(path: &Path, ext: &str, meta: &mut AudioMeta) -> Result<(), S
     let probed = symphonia::default::get_probe()
         .format(&hint, mss, &FormatOptions { enable_gapless: true, ..Default::default() }, &MetadataOptions::default())
         .map_err(|e| format!("unrecognised audio header: {e}"))?;
+    let mut probed = probed;
+    if let Some(rev) = probed.metadata.get().as_ref().and_then(|m| m.current().cloned()) {
+        read_tags(rev.tags(), meta);
+    }
+    if let Some(rev) = probed.format.metadata().current() {
+        read_tags(rev.tags(), meta);
+    }
     let track = probed.format.default_track().ok_or("no audio track")?;
     let p = &track.codec_params;
     meta.sample_rate = p.sample_rate;
@@ -78,6 +99,48 @@ fn probe_symphonia(path: &Path, ext: &str, meta: &mut AudioMeta) -> Result<(), S
         meta.duration_secs = Some(t.seconds as f64 + t.frac);
     }
     Ok(())
+}
+
+fn read_tags(tags: &[symphonia::core::meta::Tag], meta: &mut AudioMeta) {
+    use symphonia::core::meta::StandardTagKey as K;
+    let clean = |v: &str| {
+        let t = v.trim().trim_matches(char::from(0)).trim().to_string();
+        (!t.is_empty() && t.len() < 500).then_some(t)
+    };
+    for tag in tags {
+        let value = tag.value.to_string();
+        let Some(v) = clean(&value) else { continue };
+        let raw_key = tag.key.to_ascii_uppercase();
+        match tag.std_key {
+            Some(K::TrackTitle) => meta.title = meta.title.take().or(Some(v)),
+            Some(K::Genre) => meta.genre = meta.genre.take().or(Some(v)),
+            Some(K::Comment) | Some(K::Description) | Some(K::PodcastKeywords) => {
+                meta.comment = Some(match meta.comment.take() {
+                    Some(c) if !c.contains(&v) => format!("{c} {v}"),
+                    Some(c) => c,
+                    None => v,
+                })
+            }
+            Some(K::Bpm) => {
+                if let Ok(b) = v.split_whitespace().next().unwrap_or("").parse::<f32>() {
+                    if (40.0..=300.0).contains(&b) {
+                        meta.tag_bpm = Some(b);
+                    }
+                }
+            }
+            _ if matches!(raw_key.as_str(), "TKEY" | "INITIALKEY" | "KEY" | "INITIAL KEY") => {
+                meta.tag_key = crate::classifier::musical::normalise_key(&v);
+            }
+            _ if raw_key == "IKEY" => {
+                // RIFF INFO "keywords"
+                meta.comment = Some(match meta.comment.take() {
+                    Some(c) => format!("{c} {v}"),
+                    None => v,
+                })
+            }
+            _ => {}
+        }
+    }
 }
 
 #[cfg(test)]
